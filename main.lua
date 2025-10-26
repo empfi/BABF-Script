@@ -38,57 +38,28 @@ local Divider = devTab:CreateDivider()
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
-        local HttpService = game:GetService("HttpService")
-        local success, result = pcall(function()
-            -- Try GitHub API first to get a reliable download_url for the latest file
-            local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
-            local downloadUrl
-            local ok, apiResp = pcall(function()
-                return game:HttpGet(apiUrl)
-            end)
-
-            if ok and apiResp then
-                local parsed
-                local decOk, decErr = pcall(function()
-                    parsed = HttpService:JSONDecode(apiResp)
-                end)
-                if decOk and parsed and parsed.download_url then
-                    downloadUrl = parsed.download_url
-                end
-            end
-
-            -- Fallback to raw GitHub URL if API failed or didn't provide download_url
-            if not downloadUrl then
-                downloadUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
-            end
-
-            -- Fetch the actual script content
-            local newScript = game:HttpGet(downloadUrl)
-            if newScript and #newScript > 0 then
-                local loadOk, loadErr = pcall(function()
-                    loadstring(newScript)()
-                end)
-                if not loadOk then
-                    error(("Failed to load updated script: %s"):format(tostring(loadErr)))
-                end
-
-                -- Clean up UI and notify
-                Rayfield:Destroy()
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Script successfully updated!",
-                    Duration = 5,
-                    Image = "loader",
-                })
+        local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
+        local ok, err = pcall(function()
+            -- Try to open the API URL in the host default browser using the prescribed command.
+            -- This relies on the devcontainer convention: use "$BROWSER" <url>
+            if type(os) == "table" and type(os.execute) == "function" then
+                os.execute(string.format('$BROWSER "%s"', apiUrl))
             else
-                error("Downloaded script is empty")
+                error("os.execute not available in this environment")
             end
         end)
 
-        if not success then
+        if ok then
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
-                Content = "Failed to update script. Please try again later.",
+                Content = "Opened API link in host browser.",
+                Duration = 5,
+                Image = "loader",
+            })
+        else
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Failed to open API link: " .. tostring(err),
                 Duration = 5,
                 Image = "loader",
             })
