@@ -1,20 +1,4 @@
--- Safely load Rayfield UI (support loadstring or load). Exit early on failure to avoid hard errors.
-local Rayfield
-do
-    local ok, res = pcall(function()
-        local loader = loadstring or load
-        if not loader then
-            error("No loader available (loadstring/load is nil)")
-        end
-        local chunk = loader(game:HttpGet('https://sirius.menu/rayfield'))
-        return chunk()
-    end)
-    if not ok then
-        warn("Failed to load Rayfield UI: " .. tostring(res))
-        return
-    end
-    Rayfield = res
-end
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 Rayfield:Notify({
     Title = "empfi | Build a Brainrot Factory",
@@ -97,28 +81,35 @@ local updateButton = devTab:CreateButton({
 
         -- Try to load the script if fetched
         if fetchedScript then
-            -- Use loadstring or load, and handle compile/execute errors explicitly
-            local loader = loadstring or load
-            if not loader then
-                table.insert(errors, "No loader available (loadstring/load is nil).")
+            -- quick sanity check: avoid trying to load HTML/error pages as Lua
+            local preview = fetchedScript:sub(1, 300):gsub("\n", " ")
+            local looksLikeLua = fetchedScript:match("Rayfield") or fetchedScript:match("CreateWindow") or fetchedScript:match("local Window")
+            if not looksLikeLua then
+                table.insert(errors, ("Fetched content doesn't look like the expected script. Preview: %q"):format(preview))
             else
-                local okCompile, compiledOrErr = pcall(function() return loader(fetchedScript) end)
-                if okCompile and type(compiledOrErr) == "function" then
-                    local okExec, execErr = pcall(function() compiledOrErr() end)
-                    if okExec then
-                        Rayfield:Destroy()
-                        Rayfield:Notify({
-                            Title = "empfi | Build a Brainrot Factory",
-                            Content = "Script successfully updated!",
-                            Duration = 5,
-                            Image = "loader",
-                        })
-                        return
-                    else
-                        table.insert(errors, ("Execution failed: %s"):format(tostring(execErr)))
-                    end
+                -- Use loadstring or load, and handle compile/execute errors explicitly
+                local loader = loadstring or load
+                if not loader then
+                    table.insert(errors, "No loader available (loadstring/load is nil).")
                 else
-                    table.insert(errors, ("Compilation failed: %s"):format(tostring(compiledOrErr)))
+                    local okCompile, compiledOrErr = pcall(function() return loader(fetchedScript, "empfi_update") end)
+                    if okCompile and type(compiledOrErr) == "function" then
+                        local okExec, execErr = pcall(function() compiledOrErr() end)
+                        if okExec then
+                            Rayfield:Destroy()
+                            Rayfield:Notify({
+                                Title = "empfi | Build a Brainrot Factory",
+                                Content = "Script successfully updated!",
+                                Duration = 5,
+                                Image = "loader",
+                            })
+                            return
+                        else
+                            table.insert(errors, ("Execution failed: %s"):format(tostring(execErr)))
+                        end
+                    else
+                        table.insert(errors, ("Compilation failed: %s"):format(tostring(compiledOrErr)))
+                    end
                 end
             end
         end
@@ -141,14 +132,8 @@ local updateButton = devTab:CreateButton({
 })
 
 local plrs = game:GetService("Players")
--- Wait for LocalPlayer if not yet available
-local p = plrs.LocalPlayer or plrs.PlayerAdded:Wait()
--- Wait for the player's factory to appear in workspace (safe lookup first)
-local fName = p.Name .. "Factory"
-local f = workspace:FindFirstChild(fName)
-if not f then
-    f = workspace:WaitForChild(fName)
-end
+local p = plrs.LocalPlayer
+local f = workspace:WaitForChild(p.Name .. "Factory")
 local c = f:WaitForChild("Collectors")
 
 -- just found ts anti-afk ion if it works.
