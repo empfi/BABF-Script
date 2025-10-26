@@ -27,6 +27,8 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", "tractor")
 local Divider = MainTab:CreateDivider()
+local experienceTab = Window:CreateTab("Experience", "gear")
+local Divider = experienceTab:CreateDivider()
 local aboutTab = Window:CreateTab("About", "info")
 local Divider = aboutTab:CreateDivider()
 
@@ -110,93 +112,6 @@ local updateButton = devTab:CreateButton({
             Image = "loader",
         })
         warn("Update Script errors:\n" .. table.concat(errors, "\n"))
-    end,
-})
-
--- Experience Tab (client-side sound controls)
-local expTab = Window:CreateTab("Experience", "sound")
-local Divider = expTab:CreateDivider()
-
--- Sound mute state and storage for original volumes
-getgenv().soundsDisabled = false
-local originalVolumes = {}
-local mutedConnections = {}
-
-local function setSoundMuted(sound)
-    if not sound or not sound:IsA("Sound") then return end
-    if originalVolumes[sound] == nil then
-        -- store original volume so we can restore later
-        originalVolumes[sound] = sound.Volume
-    end
-    -- stop and mute the sound client-side
-    pcall(function()
-        sound:Stop()
-    end)
-    pcall(function()
-        sound.Volume = 0
-    end)
-end
-
-local function restoreSound(sound)
-    if not sound or not sound:IsA("Sound") then return end
-    local vol = originalVolumes[sound]
-    if vol ~= nil then
-        pcall(function()
-            sound.Volume = vol
-        end)
-        originalVolumes[sound] = nil
-    end
-end
-
-local function processSoundDescendants(root, mute)
-    for _, v in ipairs(root:GetDescendants()) do
-        if v:IsA("Sound") then
-            if mute then
-                setSoundMuted(v)
-            else
-                restoreSound(v)
-            end
-        end
-    end
-end
-
-local function onDescendantAdded(desc)
-    if desc:IsA("Sound") and getgenv().soundsDisabled then
-        setSoundMuted(desc)
-    end
-end
-
-local function toggleSounds(state)
-    getgenv().soundsDisabled = state
-    if state then
-        -- mute existing sounds in whole game hierarchy (client-side)
-        processSoundDescendants(game, true)
-        -- mute future sounds
-        if not mutedConnections.game then
-            mutedConnections.game = game.DescendantAdded:Connect(onDescendantAdded)
-        end
-    else
-        -- restore volumes
-        processSoundDescendants(game, false)
-        if mutedConnections.game then
-            mutedConnections.game:Disconnect()
-            mutedConnections.game = nil
-        end
-    end
-end
-
-local soundToggle = expTab:CreateToggle({
-    Name = "Disable Game Sounds (Client)",
-    CurrentValue = false,
-    Flag = "DisableSoundsToggle",
-    Callback = function(state)
-        toggleSounds(state)
-        Rayfield:Notify({
-            Title = "empfi | Build a Brainrot Factory",
-            Content = state and "Sounds disabled (client-side)" or "Sounds enabled",
-            Duration = 4,
-            Image = "loader",
-        })
     end,
 })
 
@@ -353,6 +268,33 @@ local buyToggle = MainTab:CreateToggle({
             autoBuy()
         else
             print("Auto Buy: OFF")
+        end
+    end,
+})
+
+-- Sound Control Toggle
+local soundToggle = experienceTab:CreateToggle({
+    Name = "Disable Game Sounds",
+    CurrentValue = false,
+    Flag = "DisableSoundsToggle",
+    Callback = function(state)
+        local soundService = game:GetService("SoundService")
+        if state then
+            soundService.Volume = 0
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds disabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        else
+            soundService.Volume = 1
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds enabled",
+                Duration = 3,
+                Image = "loader",
+            })
         end
     end,
 })
