@@ -38,16 +38,51 @@ local Divider = devTab:CreateDivider()
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
-        local success, result = pcall(function()
-            local rawUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
-            local newScript = game:HttpGet(rawUrl)
-            
-            if newScript and #newScript > 0 then
-                -- Simple loadstring with error catching
-                local fn, loadErr = loadstring(newScript)
-                if not fn then error("Failed to compile: " .. tostring(loadErr)) end
-                
-                fn()  -- Execute the new script
+        local HttpService = game:GetService("HttpService")
+        local sources = {
+            { name = "jsDelivr CDN", url = "https://cdn.jsdelivr.net/gh/empfi/BABF-Script@main/main.lua" },
+            { name = "GitHub RAW", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
+        }
+
+        local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
+        local errors = {}
+        local fetchedScript
+
+        -- Try CDN/raw first
+        for _, src in ipairs(sources) do
+            local ok, resp = pcall(function() return game:HttpGet(src.url) end)
+            if ok and resp and #resp > 0 then
+                fetchedScript = resp
+                break
+            else
+                table.insert(errors, ("%s fetch failed: %s"):format(src.name, tostring(resp)))
+            end
+        end
+
+        -- If still not fetched, try GitHub API to get download_url
+        if not fetchedScript then
+            local ok, apiResp = pcall(function() return game:HttpGet(apiUrl) end)
+            if ok and apiResp then
+                local parsedOk, parsed = pcall(function() return HttpService:JSONDecode(apiResp) end)
+                if parsedOk and parsed and parsed.download_url then
+                    local ok2, resp2 = pcall(function() return game:HttpGet(parsed.download_url) end)
+                    if ok2 and resp2 and #resp2 > 0 then
+                        fetchedScript = resp2
+                    else
+                        table.insert(errors, ("GitHub download_url fetch failed: %s"):format(tostring(resp2)))
+                    end
+                else
+                    table.insert(errors, ("GitHub API parse failed: %s"):format(tostring(parsed)))
+                end
+            else
+                table.insert(errors, ("GitHub API fetch failed: %s"):format(tostring(apiResp)))
+            end
+        end
+
+        -- Try to load the script if fetched
+        if fetchedScript then
+            local loadOk, loadErr = pcall(function() loadstring(fetchedScript)() end)
+            if loadOk then
                 Rayfield:Destroy()
                 Rayfield:Notify({
                     Title = "empfi | Build a Brainrot Factory",
@@ -55,19 +90,26 @@ local updateButton = devTab:CreateButton({
                     Duration = 5,
                     Image = "loader",
                 })
+                return
             else
-                error("Empty script received")
+                table.insert(errors, ("loadstring failed: %s"):format(tostring(loadErr)))
+            end
+        end
+
+        -- All attempts failed: open API page in host browser and notify with collected errors
+        pcall(function()
+            if type(os) == "table" and type(os.execute) == "function" then
+                os.execute(string.format('$BROWSER "%s"', apiUrl))
             end
         end)
-        
-        if not success then
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Update failed: " .. tostring(result),
-                Duration = 6,
-                Image = "loader",
-            })
-        end
+
+        Rayfield:Notify({
+            Title = "empfi | Build a Brainrot Factory",
+            Content = "Update failed. See console for details. Opened API page as fallback.",
+            Duration = 8,
+            Image = "loader",
+        })
+        warn("Update Script errors:\n" .. table.concat(errors, "\n"))
     end,
 })
 
@@ -232,96 +274,4 @@ local Paragraph = aboutTab:CreateParagraph({
     Title = "About Script",
     Content =
     "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
-})
-
--- Add Experience tab with sound mute toggle
-local experienceTab = Window:CreateTab("Experience", "speaker")
-local Divider = experienceTab:CreateDivider()
-
--- Sound mute state and helpers
-getgenv().soundsMuted = false
-local originalVolumes = {}
-local soundConn
-
-local function muteSoundInstance(snd)
-	-- ...only operate on Sound instances
-	if not snd or not snd:IsA or not snd:IsA("Sound") then return end
-	-- save original once
-	if originalVolumes[snd] == nil then
-		originalVolumes[snd] = snd.Volume
-	end
-	-- mute client-side
-	pcall(function() snd.Volume = 0 end)
-end
-
-local function unmuteSoundInstance(snd)
-	if not snd or not snd:IsA or not snd:IsA("Sound") then return end
-	local orig = originalVolumes[snd]
-	if orig ~= nil then
-		pcall(function() snd.Volume = orig end)
-		originalVolumes[snd] = nil
-	else
-		-- fallback restore to 1 if unknown
-		pcall(function() snd.Volume = 1 end)
-	end
-end
-
-local function muteAllSounds()
-	-- mute existing sounds
-	for _, inst in ipairs(game:GetDescendants()) do
-		if inst:IsA("Sound") then
-			muteSoundInstance(inst)
-		end
-	end
-	-- ensure new sounds are muted while toggled
-	if not soundConn then
-		soundConn = game.DescendantAdded:Connect(function(inst)
-			if inst and inst:IsA and inst:IsA("Sound") then
-				muteSoundInstance(inst)
-			end
-		end)
-	end
-end
-
-local function unmuteAllSounds()
-	-- stop listening for new sounds
-	if soundConn then
-		pcall(function() soundConn:Disconnect() end)
-		soundConn = nil
-	end
-	-- restore saved volumes
-	for snd, _ in pairs(originalVolumes) do
-		if snd and snd:IsA and snd:IsA("Sound") then
-			unmuteSoundInstance(snd)
-		end
-	end
-	-- clear storage
-	originalVolumes = {}
-end
-
--- Toggle UI: disable game sounds (client-side)
-local soundToggle = experienceTab:CreateToggle({
-	Name = "Disable Game Sounds (client-side)",
-	CurrentValue = false,
-	Flag = "DisableSoundsToggle",
-	Callback = function(state)
-		getgenv().soundsMuted = state
-		if state then
-			muteAllSounds()
-			Rayfield:Notify({
-				Title = "empfi | Experience",
-				Content = "Game sounds disabled (client-side).",
-				Duration = 4,
-				Image = "loader",
-			})
-		else
-			unmuteAllSounds()
-			Rayfield:Notify({
-				Title = "empfi | Experience",
-				Content = "Game sounds restored.",
-				Duration = 4,
-				Image = "loader",
-			})
-		end
-	end,
 })
