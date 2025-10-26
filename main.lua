@@ -39,11 +39,28 @@ local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local success, result = pcall(function()
-            local newScript = game:HttpGet('http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua')
+            -- Add timestamp to URL to prevent caching
+            local timestamp = os.time()
+            local url = string.format(
+                'http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua?t=%d',
+                timestamp
+            )
+            
+            -- Get latest script with no-cache headers
+            local newScript = (function()
+                local req = game:GetService('HttpService'):RequestAsync({
+                    Url = url,
+                    Method = "GET",
+                    Headers = {
+                        ["Cache-Control"] = "no-cache",
+                        ["Pragma"] = "no-cache"
+                    }
+                })
+                return req.Body
+            end)()
+
             if newScript then
-                -- Load the new script
                 loadstring(newScript)()
-                -- Destroy the current UI
                 Rayfield:Destroy()
                 Rayfield:Notify({
                     Title = "empfi | Build a Brainrot Factory",
@@ -225,5 +242,5 @@ local buyToggle = MainTab:CreateToggle({
 local Paragraph = aboutTab:CreateParagraph({
     Title = "About Script",
     Content =
-    "This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
+    "Heyyy! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
 })
