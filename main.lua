@@ -118,8 +118,34 @@ local updateButton = devTab:CreateButton({
 
 local plrs = game:GetService("Players")
 local p = plrs.LocalPlayer
-local f = workspace:WaitForChild(p.Name .. "Factory")
-local c = f:WaitForChild("Collectors")
+-- Wait for LocalPlayer if script runs before player is available
+if not p then
+    repeat
+        task.wait(0.1)
+        p = plrs.LocalPlayer
+    until p
+end
+
+-- Try to find the player's factory but avoid hard error if missing
+local f
+local ok, err = pcall(function()
+    f = workspace:WaitForChild(p.Name .. "Factory")
+end)
+if not ok or not f then
+    warn("Factory not found for player '" .. tostring(p and p.Name) .. "'. Some features may be disabled.")
+    Rayfield:Notify({
+        Title = "empfi | Build a Brainrot Factory",
+        Content = "Factory not found. Some features may be unavailable.",
+        Duration = 5,
+        Image = "loader",
+    })
+    -- create a dummy table to avoid nil errors in code that expects 'f'
+    f = Instance.new("Folder")
+    f.Name = (p and (p.Name .. "Factory")) or "MissingFactory"
+    f.Parent = workspace
+end
+
+local c = f:FindFirstChild("Collectors") or nil
 
 -- just found ts anti-afk ion if it works.
 getgenv().afk_toggle = true
