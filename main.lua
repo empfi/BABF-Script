@@ -83,7 +83,9 @@ local updateButton = devTab:CreateButton({
         if fetchedScript then
             -- quick sanity check: avoid trying to load HTML/error pages as Lua
             local preview = fetchedScript:sub(1, 300):gsub("\n", " ")
-            local looksLikeLua = fetchedScript:match("Rayfield") or fetchedScript:match("CreateWindow") or fetchedScript:match("local Window")
+            local lower = preview:lower()
+            local looksLikeHtml = lower:find("<!doctype") or lower:find("<html") or lower:find("<head") or lower:find("404") or lower:find("not found")
+            local looksLikeLua = (fetchedScript:match("Rayfield") or fetchedScript:match("CreateWindow") or fetchedScript:match("local Window")) and not looksLikeHtml
             if not looksLikeLua then
                 table.insert(errors, ("Fetched content doesn't look like the expected script. Preview: %q"):format(preview))
             else
@@ -92,9 +94,10 @@ local updateButton = devTab:CreateButton({
                 if not loader then
                     table.insert(errors, "No loader available (loadstring/load is nil).")
                 else
-                    local okCompile, compiledOrErr = pcall(function() return loader(fetchedScript, "empfi_update") end)
-                    if okCompile and type(compiledOrErr) == "function" then
-                        local okExec, execErr = pcall(function() compiledOrErr() end)
+                    -- capture multiple returns: compiled chunk (or nil) and possible error message
+                    local okCompile, compiledOrNil, compileErr = pcall(function() return loader(fetchedScript, "empfi_update") end)
+                    if okCompile and type(compiledOrNil) == "function" then
+                        local okExec, execErr = pcall(compiledOrNil)
                         if okExec then
                             Rayfield:Destroy()
                             Rayfield:Notify({
@@ -108,7 +111,13 @@ local updateButton = devTab:CreateButton({
                             table.insert(errors, ("Execution failed: %s"):format(tostring(execErr)))
                         end
                     else
-                        table.insert(errors, ("Compilation failed: %s"):format(tostring(compiledOrErr)))
+                        -- prefer the loader-provided error (compileErr) if present, otherwise stringify the first non-function return
+                        local compileMsg = compileErr or tostring(compiledOrNil)
+                        table.insert(errors, ("Compilation failed: %s"):format(tostring(compileMsg)))
+                        -- add hint when parser reports common truncation/syntax issues
+                        if compileMsg:lower():find("expected") or compileMsg:lower():find("parsing") then
+                            table.insert(errors, "Hint: the fetched file may be truncated or contain HTML (check the API/raw URL manually).")
+                        end
                     end
                 end
             end
