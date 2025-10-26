@@ -1,22 +1,32 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local plrs = game:GetService("Players")
 
+-- Wait for LocalPlayer if script runs before player is available
+local p = plrs.LocalPlayer
+if not p then
+    repeat
+        task.wait(0.1)
+        p = plrs.LocalPlayer
+    until p
+end
+
+-- Try to find the player's factory but avoid hard error if missing
+local f
+local ok, err = pcall(function()
+    f = workspace:WaitForChild(p.Name .. "Factory", 10) -- Add timeout
+end)
+
+-- Only create UI after factory setup attempt
 Rayfield:Notify({
     Title = "empfi | Build a Brainrot Factory",
-    Content = "Loading!",
+    Content = "Loading...",
     Duration = 5,
-    Image = "loader",
 })
+
 local Window = Rayfield:CreateWindow({
     Name = "empfi | Build a Brainrot Factory",
-    Icon = 0,
     LoadingTitle = "empfi loading...",
     LoadingSubtitle = "by empfi",
-    ShowText = "empfi",
-    Theme = "Default",
-    ToggleUIKeybind = "K",
-    DisableRayfieldPrompts = true,
-    DisableBuildWarnings = false,
-
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "empfi",
@@ -24,6 +34,25 @@ local Window = Rayfield:CreateWindow({
     },
     KeySystem = false,
 })
+
+if not ok or not f then
+    warn("Factory not found: " .. tostring(err))
+    Rayfield:Notify({
+        Title = "Warning",
+        Content = "Factory not found. Some features disabled.",
+        Duration = 5,
+    })
+    f = Instance.new("Folder")
+    f.Name = p.Name .. "Factory"
+    f.Parent = workspace
+end
+
+local c = f:FindFirstChild("Collectors")
+if not c then
+    c = Instance.new("Folder")
+    c.Name = "Collectors"
+    c.Parent = f
+end
 
 -- Replace string icon names (which can error) with numeric 0 so tabs load reliably
 local MainTab = Window:CreateTab("Main", 0)
@@ -115,37 +144,6 @@ local updateButton = devTab:CreateButton({
         warn("Update Script errors:\n" .. table.concat(errors, "\n"))
     end,
 })
-
-local plrs = game:GetService("Players")
-local p = plrs.LocalPlayer
--- Wait for LocalPlayer if script runs before player is available
-if not p then
-    repeat
-        task.wait(0.1)
-        p = plrs.LocalPlayer
-    until p
-end
-
--- Try to find the player's factory but avoid hard error if missing
-local f
-local ok, err = pcall(function()
-    f = workspace:WaitForChild(p.Name .. "Factory")
-end)
-if not ok or not f then
-    warn("Factory not found for player '" .. tostring(p and p.Name) .. "'. Some features may be disabled.")
-    Rayfield:Notify({
-        Title = "empfi | Build a Brainrot Factory",
-        Content = "Factory not found. Some features may be unavailable.",
-        Duration = 5,
-        Image = "loader",
-    })
-    -- create a dummy table to avoid nil errors in code that expects 'f'
-    f = Instance.new("Folder")
-    f.Name = (p and (p.Name .. "Factory")) or "MissingFactory"
-    f.Parent = workspace
-end
-
-local c = f:FindFirstChild("Collectors") or nil
 
 -- just found ts anti-afk ion if it works.
 getgenv().afk_toggle = true
