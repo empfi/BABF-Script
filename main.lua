@@ -1,4 +1,13 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Initial setup with error handling
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success then
+    warn("Failed to load Rayfield UI Library")
+    return
+end
+
 local plrs = game:GetService("Players")
 
 -- Wait for LocalPlayer if script runs before player is available
@@ -23,35 +32,43 @@ Rayfield:Notify({
     Duration = 5,
 })
 
-local Window = Rayfield:CreateWindow({
-    Name = "empfi | Build a Brainrot Factory",
-    Icon = 0,  -- Add back icon
-    LoadingTitle = "empfi loading...",
-    LoadingSubtitle = "by empfi",
-    ShowText = "empfi",  -- Add back ShowText
-    Theme = "Default",   -- Add back Theme
-    ToggleUIKeybind = "K", -- Add back keybind
-    DisableRayfieldPrompts = true,
-    DisableBuildWarnings = false,
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "empfi",
-        FileName = "BABF"
-    },
-    KeySystem = false,
-})
-
-if not ok or not f then
-    warn("Factory not found: " .. tostring(err))
-    Rayfield:Notify({
-        Title = "Warning",
-        Content = "Factory not found. Some features disabled.",
-        Duration = 5,
+-- Create window with proper error handling
+local Window = nil
+success, Window = pcall(function()
+    return Rayfield:CreateWindow({
+        Name = "empfi | Build a Brainrot Factory",
+        Icon = 0,  -- Add back icon
+        LoadingTitle = "empfi loading...",
+        LoadingSubtitle = "by empfi",
+        ShowText = "empfi",  -- Add back ShowText
+        Theme = "Default",   -- Add back Theme
+        ToggleUIKeybind = "K", -- Add back keybind
+        DisableRayfieldPrompts = true,
+        DisableBuildWarnings = false,
+        ConfigurationSaving = {
+            Enabled = true,
+            FolderName = "empfi",
+            FileName = "BABF"
+        },
+        KeySystem = false,
     })
-    f = Instance.new("Folder")
-    f.Name = p.Name .. "Factory"
-    f.Parent = workspace
+end)
+
+if not success or not Window then
+    warn("Failed to create window")
+    return
 end
+
+task.wait(1) -- Add delay before creating tabs
+
+-- Create all tabs and their dividers first
+local MainTab = Window:CreateTab("Main", 0)
+local experienceTab = Window:CreateTab("Experience", 0)
+local lightingTab = Window:CreateTab("Lighting", 0)
+local aboutTab = Window:CreateTab("About", 0)
+local devTab = Window:CreateTab("Dev", 0)
+
+task.wait(0.5) -- Add delay before adding content
 
 local c = f:FindFirstChild("Collectors")
 if not c then
@@ -59,22 +76,6 @@ if not c then
     c.Name = "Collectors"
     c.Parent = f
 end
-
--- Create all tabs and their dividers first
-local MainTab = Window:CreateTab("Main", 0)
-MainTab:CreateDivider()
-
-local experienceTab = Window:CreateTab("Experience", 0)
-experienceTab:CreateDivider()
-
-local lightingTab = Window:CreateTab("Lighting", 0)
-lightingTab:CreateDivider()
-
-local aboutTab = Window:CreateTab("About", 0)
-aboutTab:CreateDivider()
-
-local devTab = Window:CreateTab("Dev", 0)
-devTab:CreateDivider()
 
 -- Add Sound Toggle to Experience Tab
 experienceTab:CreateToggle({
