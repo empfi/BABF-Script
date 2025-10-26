@@ -163,7 +163,7 @@ local updateButton = MainTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local success, result = pcall(function()
-            local newScript = game:HttpGet('https://empfi-scripts.de.cool/BABF/main.lua')
+            local newScript = game:HttpGet('http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua')
             if newScript then
                 -- Load the new script
                 loadstring(newScript)()
