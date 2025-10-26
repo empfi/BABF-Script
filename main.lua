@@ -27,29 +27,8 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", "tractor")
 local Divider = MainTab:CreateDivider()
-
--- Add Experience Tab
-local experienceTab = Window:CreateTab("Experience", "sound")
+local experienceTab = Window:CreateTab("Experience", "gear")
 local Divider = experienceTab:CreateDivider()
-
--- Sound Toggle
-local soundToggle = experienceTab:CreateToggle({
-    Name = "Game Sounds",
-    CurrentValue = true,
-    Flag = "SoundToggle",
-    Callback = function(state)
-        local soundService = game:GetService("SoundService")
-        soundService.Volume = state and 1 or 0
-        
-        Rayfield:Notify({
-            Title = "empfi | Build a Brainrot Factory",
-            Content = state and "Game Sounds Enabled" or "Game Sounds Disabled",
-            Duration = 3,
-            Image = "sound",
-        })
-    end,
-})
-
 local aboutTab = Window:CreateTab("About", "info")
 local Divider = aboutTab:CreateDivider()
 
@@ -289,6 +268,33 @@ local buyToggle = MainTab:CreateToggle({
             autoBuy()
         else
             print("Auto Buy: OFF")
+        end
+    end,
+})
+
+-- Sound Control Toggle
+local soundToggle = experienceTab:CreateToggle({
+    Name = "Disable Game Sounds",
+    CurrentValue = false,
+    Flag = "DisableSoundsToggle",
+    Callback = function(state)
+        local soundService = game:GetService("SoundService")
+        if state then
+            soundService.Volume = 0
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds disabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        else
+            soundService.Volume = 1
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds enabled",
+                Duration = 3,
+                Image = "loader",
+            })
         end
     end,
 })
