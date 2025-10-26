@@ -81,18 +81,29 @@ local updateButton = devTab:CreateButton({
 
         -- Try to load the script if fetched
         if fetchedScript then
-            local loadOk, loadErr = pcall(function() loadstring(fetchedScript)() end)
-            if loadOk then
-                Rayfield:Destroy()
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Script successfully updated!",
-                    Duration = 5,
-                    Image = "loader",
-                })
-                return
+            -- Use loadstring or load, and handle compile/execute errors explicitly
+            local loader = loadstring or load
+            if not loader then
+                table.insert(errors, "No loader available (loadstring/load is nil).")
             else
-                table.insert(errors, ("loadstring failed: %s"):format(tostring(loadErr)))
+                local okCompile, compiledOrErr = pcall(function() return loader(fetchedScript) end)
+                if okCompile and type(compiledOrErr) == "function" then
+                    local okExec, execErr = pcall(function() compiledOrErr() end)
+                    if okExec then
+                        Rayfield:Destroy()
+                        Rayfield:Notify({
+                            Title = "empfi | Build a Brainrot Factory",
+                            Content = "Script successfully updated!",
+                            Duration = 5,
+                            Image = "loader",
+                        })
+                        return
+                    else
+                        table.insert(errors, ("Execution failed: %s"):format(tostring(execErr)))
+                    end
+                else
+                    table.insert(errors, ("Compilation failed: %s"):format(tostring(compiledOrErr)))
+                end
             end
         end
 
