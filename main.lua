@@ -39,33 +39,19 @@ local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local success, result = pcall(function()
-            -- Use GitHub's API to get the latest content
-            local url = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
-            local response = game:GetService('HttpService'):RequestAsync({
-                Url = url,
-                Method = "GET",
-                Headers = {
-                    ["Accept"] = "application/vnd.github.v3+json"
-                }
-            })
+            -- Get raw content directly from GitHub
+            local rawUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
+            local newScript = game:HttpGet(rawUrl)
             
-            if response.Success then
-                local data = game:GetService('HttpService'):JSONDecode(response.Body)
-                -- content is base64 encoded, need to decode it
-                local newScript = game:GetService('HttpService'):Base64Decode(data.content)
-                
-                if newScript then
-                    loadstring(newScript)()
-                    Rayfield:Destroy()
-                    Rayfield:Notify({
-                        Title = "empfi | Build a Brainrot Factory",
-                        Content = "Script successfully updated!",
-                        Duration = 5,
-                        Image = "loader",
-                    })
-                end
-            else
-                error("Failed to fetch update")
+            if newScript then
+                loadstring(newScript)()
+                Rayfield:Destroy()
+                Rayfield:Notify({
+                    Title = "empfi | Build a Brainrot Factory",
+                    Content = "Script successfully updated!",
+                    Duration = 5,
+                    Image = "loader",
+                })
             end
         end)
         
