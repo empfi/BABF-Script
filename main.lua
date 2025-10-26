@@ -23,26 +23,36 @@ Rayfield:Notify({
     Duration = 5,
 })
 
+-- Create Window with proper icons
 local Window = Rayfield:CreateWindow({
     Name = "empfi | Build a Brainrot Factory",
     LoadingTitle = "empfi loading...",
     LoadingSubtitle = "by empfi",
+    ShowText = "empfi",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "empfi",
         FileName = "BABF-Config"
     },
     KeySystem = false,
+    Icon = "rbxassetid://11419711755"  -- Added proper icon
 })
 
--- Create tabs without icons
-local MainTab = Window:CreateTab("Main")
-local experienceTab = Window:CreateTab("Experience")
-local aboutTab = Window:CreateTab("About")
-local devTab = Window:CreateTab("Dev")
-local lightingTab = Window:CreateTab("Lighting")
+-- Create tabs with proper icons
+local MainTab = Window:CreateTab("Main", "rbxassetid://6026568198")
+local experienceTab = Window:CreateTab("Experience", "rbxassetid://6031280882")
+local aboutTab = Window:CreateTab("About", "rbxassetid://6026568198")
+local devTab = Window:CreateTab("Dev", "rbxassetid://6022668888")
+local lightingTab = Window:CreateTab("Lighting", "rbxassetid://6031075926")
 
--- Load saved configuration
+-- Create dividers after tabs are created
+local MainDivider = MainTab:CreateDivider()
+local expDivider = experienceTab:CreateDivider()
+local aboutDivider = aboutTab:CreateDivider()
+local devDivider = devTab:CreateDivider()
+local lightingDivider = lightingTab:CreateDivider()
+
+-- Load saved configuration first
 local savedConfig = Window:LoadConfiguration()
 if savedConfig then
     -- Restore Anti-Lag state
@@ -76,17 +86,126 @@ if savedConfig then
     end
 end
 
--- Only create UI after factory setup attempt
-Rayfield:Notify({
-    Title = "empfi | Build a Brainrot Factory",
-    Content = "Loading...",
-    Duration = 5,
+-- Now create all tab content in order
+MainTab:CreateLabel("Stand on the middle of collectors", "info")
+MainTab:CreateToggle({
+    Name = "Auto Collect Nearby Collectors",
+    CurrentValue = false,
+    Flag = "AutoCollectToggle",
+    Callback = function(state)
+        getgenv().autoCollect = state
+        if state then
+            print("Auto Collect: ON")
+            task.spawn(function()
+                while getgenv().autoCollect do
+                    nearbyCollect()
+
+                    task.wait(0.1)
+                end
+            end)
+        else
+            print("Auto Collect: OFF")
+        end
+    end,
 })
 
--- Replace string icon names (which can error) with numeric 0 so tabs load reliably
-local Divider = MainTab:CreateDivider()
-local Divider = experienceTab:CreateDivider()
-local Divider = aboutTab:CreateDivider()
+
+-- Anti Lag Toggle
+getgenv().antiLagEnabled = false
+
+local lagToggle = MainTab:CreateToggle({
+    Name = "Anti Lag",
+    CurrentValue = false,
+    Flag = "AntiLagToggle",
+    Callback = function(state)
+        getgenv().antiLagEnabled = state
+        if state then
+            antiLag()
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Anti Lag Enabled",
+                Duration = 5,
+                Image = "loader",
+            })
+        else
+            -- Restore items folder back to the factory
+            local replicatedStorage = game:GetService("ReplicatedStorage")
+            local itemFolder = replicatedStorage:FindFirstChild("Items")
+            if itemFolder then
+                itemFolder.Parent = f
+            end
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Anti Lag Disabled",
+                Duration = 5,
+                Image = "loader",
+            })
+        end
+    end,
+})
+
+-- Select Items
+local buyDropdown = MainTab:CreateDropdown({
+    Name = "Select Item(s) to Buy",
+    Options = shopItems,
+    CurrentOption = { "Basic Conveyor" },
+    MultipleOptions = true,
+    Flag = "selectedItems",
+    Callback = function(Options)
+        getgenv().selectedItems = Options
+        --print("Selected:", table.concat(getgenv().selectedItems, ", "))
+    end,
+})
+
+-- Toggle for auto-buy
+local buyToggle = MainTab:CreateToggle({
+    Name = "Auto Buy",
+    CurrentValue = false,
+    Flag = "AutoBuyToggle",
+    Callback = function(state)
+        getgenv().autoBuyEnabled = state
+        if state then
+            print("Auto Buy: ON")
+            -- run autoBuy in a new task so the UI thread isn't blocked
+            task.spawn(autoBuy)
+        else
+            print("Auto Buy: OFF")
+        end
+    end,
+})
+
+-- Sound Control Toggle
+local soundToggle = experienceTab:CreateToggle({
+    Name = "Disable Game Sounds",
+    CurrentValue = false,
+    Flag = "DisableSoundsToggle",
+    Callback = function(state)
+        local soundService = game:GetService("SoundService")
+        if state then
+            soundService.Volume = 0
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds disabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        else
+            soundService.Volume = 1
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds enabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        end
+    end,
+})
+
+local Paragraph = aboutTab:CreateParagraph({
+    Title = "About Script",
+    Content =
+    "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
+})
 
 -- Dev Tab (holds developer tools like the updater)
 local Divider = devTab:CreateDivider()
@@ -237,126 +356,6 @@ function autoBuy()
         task.wait(1)
     end
 end
-
-local collectLabel = MainTab:CreateLabel("Stand on the middle of collectors", "info")
-local Toggle = MainTab:CreateToggle({
-    Name = "Auto Collect Nearby Collectors",
-    CurrentValue = false,
-    Flag = "AutoCollectToggle",
-    Callback = function(state)
-        getgenv().autoCollect = state
-        if state then
-            print("Auto Collect: ON")
-            task.spawn(function()
-                while getgenv().autoCollect do
-                    nearbyCollect()
-
-                    task.wait(0.1)
-                end
-            end)
-        else
-            print("Auto Collect: OFF")
-        end
-    end,
-})
-
-
--- Anti Lag Toggle
-getgenv().antiLagEnabled = false
-
-local lagToggle = MainTab:CreateToggle({
-    Name = "Anti Lag",
-    CurrentValue = false,
-    Flag = "AntiLagToggle",
-    Callback = function(state)
-        getgenv().antiLagEnabled = state
-        if state then
-            antiLag()
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Enabled",
-                Duration = 5,
-                Image = "loader",
-            })
-        else
-            -- Restore items folder back to the factory
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            local itemFolder = replicatedStorage:FindFirstChild("Items")
-            if itemFolder then
-                itemFolder.Parent = f
-            end
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Disabled",
-                Duration = 5,
-                Image = "loader",
-            })
-        end
-    end,
-})
-
--- Select Items
-local buyDropdown = MainTab:CreateDropdown({
-    Name = "Select Item(s) to Buy",
-    Options = shopItems,
-    CurrentOption = { "Basic Conveyor" },
-    MultipleOptions = true,
-    Flag = "selectedItems",
-    Callback = function(Options)
-        getgenv().selectedItems = Options
-        --print("Selected:", table.concat(getgenv().selectedItems, ", "))
-    end,
-})
-
--- Toggle for auto-buy
-local buyToggle = MainTab:CreateToggle({
-    Name = "Auto Buy",
-    CurrentValue = false,
-    Flag = "AutoBuyToggle",
-    Callback = function(state)
-        getgenv().autoBuyEnabled = state
-        if state then
-            print("Auto Buy: ON")
-            -- run autoBuy in a new task so the UI thread isn't blocked
-            task.spawn(autoBuy)
-        else
-            print("Auto Buy: OFF")
-        end
-    end,
-})
-
--- Sound Control Toggle
-local soundToggle = experienceTab:CreateToggle({
-    Name = "Disable Game Sounds",
-    CurrentValue = false,
-    Flag = "DisableSoundsToggle",
-    Callback = function(state)
-        local soundService = game:GetService("SoundService")
-        if state then
-            soundService.Volume = 0
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Game sounds disabled",
-                Duration = 3,
-                Image = "loader",
-            })
-        else
-            soundService.Volume = 1
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Game sounds enabled",
-                Duration = 3,
-                Image = "loader",
-            })
-        end
-    end,
-})
-
-local Paragraph = aboutTab:CreateParagraph({
-    Title = "About Script",
-    Content =
-    "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
-})
 
 -- Add Lighting tab and buttons
 local lightingTab = Window:CreateTab("Lighting", 0)
