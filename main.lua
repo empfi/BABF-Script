@@ -256,5 +256,5 @@ local buyToggle = MainTab:CreateToggle({
 local Paragraph = aboutTab:CreateParagraph({
     Title = "About Script",
     Content =
-    "Heyyy! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
+    "This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
 })
