@@ -25,15 +25,16 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false,
 })
 
-local MainTab = Window:CreateTab("Main", "tractor")
+-- Replace string icon names (which can error) with numeric 0 so tabs load reliably
+local MainTab = Window:CreateTab("Main", 0)
 local Divider = MainTab:CreateDivider()
-local experienceTab = Window:CreateTab("Experience", "gear")
+local experienceTab = Window:CreateTab("Experience", 0)
 local Divider = experienceTab:CreateDivider()
-local aboutTab = Window:CreateTab("About", "info")
+local aboutTab = Window:CreateTab("About", 0)
 local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
-local devTab = Window:CreateTab("Dev", "folder")
+local devTab = Window:CreateTab("Dev", 0)
 local Divider = devTab:CreateDivider()
 
 -- Update Button
@@ -265,7 +266,8 @@ local buyToggle = MainTab:CreateToggle({
         getgenv().autoBuyEnabled = state
         if state then
             print("Auto Buy: ON")
-            autoBuy()
+            -- run autoBuy in a new task so the UI thread isn't blocked
+            task.spawn(autoBuy)
         else
             print("Auto Buy: OFF")
         end
