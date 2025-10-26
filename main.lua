@@ -1,44 +1,4 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- Initialize settings table
-local settings = {
-    antiLag = false,
-    autoCollect = false,
-    autoBuy = false,
-    selectedItems = {"Basic Conveyor"},
-    soundDisabled = false
-}
-
--- Load saved settings
-local success, savedSettings = pcall(function()
-    return game:GetService("HttpService"):JSONDecode(readfile("empfi_settings.json"))
-end)
-if success then
-    for k, v in pairs(savedSettings) do
-        settings[k] = v
-    end
-end
-
--- Create UI first for faster loading
-local Window = Rayfield:CreateWindow({
-    Name = "empfi | Build a Brainrot Factory",
-    LoadingTitle = "empfi loading...",
-    LoadingSubtitle = "by empfi",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "empfi",
-        FileName = "BABF"
-    },
-    KeySystem = false,
-})
-
--- Replace tab icons with proper Rayfield icons
-local MainTab = Window:CreateTab("Main", 4483362458)  -- Home icon
-local experienceTab = Window:CreateTab("Experience", 4483345998)  -- Settings icon
-local aboutTab = Window:CreateTab("About", 4483345737)  -- Info icon
-local devTab = Window:CreateTab("Dev", 4483344537)  -- Tools icon
-local lightingTab = Window:CreateTab("Lighting", 4483362839)  -- Effects icon
-
 local plrs = game:GetService("Players")
 
 -- Wait for LocalPlayer if script runs before player is available
@@ -63,27 +23,72 @@ Rayfield:Notify({
     Duration = 5,
 })
 
-if not ok or not f then
-    warn("Factory not found: " .. tostring(err))
-    Rayfield:Notify({
-        Title = "Warning",
-        Content = "Factory not found. Some features disabled.",
-        Duration = 5,
-    })
-    f = Instance.new("Folder")
-    f.Name = p.Name .. "Factory"
-    f.Parent = workspace
+local Window = Rayfield:CreateWindow({
+    Name = "empfi | Build a Brainrot Factory",
+    LoadingTitle = "empfi loading...",
+    LoadingSubtitle = "by empfi",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "empfi",
+        FileName = "BABF-Config"
+    },
+    KeySystem = false,
+})
+
+-- Create tabs without icons
+local MainTab = Window:CreateTab("Main")
+local experienceTab = Window:CreateTab("Experience")
+local aboutTab = Window:CreateTab("About")
+local devTab = Window:CreateTab("Dev")
+local lightingTab = Window:CreateTab("Lighting")
+
+-- Load saved configuration
+local savedConfig = Window:LoadConfiguration()
+if savedConfig then
+    -- Restore Anti-Lag state
+    if savedConfig.Flags and savedConfig.Flags.AntiLagToggle then
+        task.spawn(function()
+            antiLag()
+            getgenv().antiLagEnabled = true
+        end)
+    end
+    
+    -- Restore Auto-Collect state
+    if savedConfig.Flags and savedConfig.Flags.AutoCollectToggle then
+        task.spawn(function()
+            getgenv().autoCollect = true
+            while getgenv().autoCollect do
+                nearbyCollect()
+                task.wait(0.1)
+            end
+        end)
+    end
+
+    -- Restore Auto-Buy state and items
+    if savedConfig.Flags and savedConfig.Flags.selectedItems then
+        getgenv().selectedItems = savedConfig.Flags.selectedItems
+    end
+    if savedConfig.Flags and savedConfig.Flags.AutoBuyToggle then
+        task.spawn(function()
+            getgenv().autoBuyEnabled = true
+            autoBuy()
+        end)
+    end
 end
 
-local c = f:FindFirstChild("Collectors")
-if not c then
-    c = Instance.new("Folder")
-    c.Name = "Collectors"
-    c.Parent = f
-end
+-- Only create UI after factory setup attempt
+Rayfield:Notify({
+    Title = "empfi | Build a Brainrot Factory",
+    Content = "Loading...",
+    Duration = 5,
+})
+
+-- Replace string icon names (which can error) with numeric 0 so tabs load reliably
+local Divider = MainTab:CreateDivider()
+local Divider = experienceTab:CreateDivider()
+local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
-local devTab = Window:CreateTab("Dev", 0)
 local Divider = devTab:CreateDivider()
 
 -- Update Button
@@ -215,70 +220,23 @@ local shopItems = {
 getgenv().autoBuyEnabled, getgenv().autoCollect = false, false
 getgenv().selectedItems = { "Basic Conveyor" }
 
--- Auto Buy improved implementation
+-- Fix Auto-Buy function
 function autoBuy()
-    while getgenv().autoBuyEnabled and task.wait(1) do
-        if not getgenv().selectedItems then return end
-        
-        local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes", true)
-        if not remote then return end
-        
-        local purchaseRemote = remote:FindFirstChild("PurchaseItem", true)
-        if not purchaseRemote then return end
-
-        for _, item in ipairs(getgenv().selectedItems) do
-            purchaseRemote:FireServer(item)
-        end
-    end
-end
-
--- Save settings function
-local function saveSettings()
-    local dataToSave = {
-        antiLag = getgenv().antiLagEnabled,
-        autoCollect = getgenv().autoCollect,
-        autoBuy = getgenv().autoBuyEnabled,
-        selectedItems = getgenv().selectedItems,
-        soundDisabled = game:GetService("SoundService").Volume == 0
-    }
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local PurchaseRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Game"):WaitForChild("PurchaseItem")
     
-    pcall(function()
-        writefile("empfi_settings.json", game:GetService("HttpService"):JSONEncode(dataToSave))
-    end)
-end
-
--- Apply saved settings
-if settings.antiLag then
-    antiLag()
-    getgenv().antiLagEnabled = true
-end
-
-if settings.autoCollect then
-    getgenv().autoCollect = true
-    task.spawn(function()
-        while getgenv().autoCollect do
-            nearbyCollect()
-            task.wait(0.1)
+    while getgenv().autoBuyEnabled do
+        if getgenv().selectedItems and #getgenv().selectedItems > 0 then
+            for _, item in ipairs(getgenv().selectedItems) do
+                if PurchaseRemote then
+                    PurchaseRemote:FireServer(item)
+                    task.wait(0.1) -- Add small delay between purchases
+                end
+            end
         end
-    end)
-end
-
-if settings.autoBuy then
-    getgenv().autoBuyEnabled = true
-    getgenv().selectedItems = settings.selectedItems
-    task.spawn(autoBuy)
-end
-
-if settings.soundDisabled then
-    game:GetService("SoundService").Volume = 0
-end
-
--- Save settings when closing
-game:GetService("CoreGui").ChildRemoved:Connect(function(child)
-    if child.Name == "Rayfield" then
-        saveSettings()
+        task.wait(1)
     end
-end)
+end
 
 local collectLabel = MainTab:CreateLabel("Stand on the middle of collectors", "info")
 local Toggle = MainTab:CreateToggle({
@@ -723,3 +681,10 @@ lightingTab:CreateButton({
         end
     end
 })
+
+-- Save configuration before script ends
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function()
+    if Window then
+        Window:SaveConfiguration()
+    end
+end)
