@@ -38,32 +38,49 @@ local Divider = devTab:CreateDivider()
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
+        local sources = {
+            { name = "jsDelivr CDN", url = "https://cdn.jsdelivr.net/gh/empfi/BABF-Script@main/main.lua" },
+            { name = "GitHub Raw", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
+            { name = "ghproxy", url = "https://ghproxy.com/https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
+            { name = "r.jina.ai (proxy)", url = "https://r.jina.ai/http://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
+        }
+
+        local errors = {}
+        for _, src in ipairs(sources) do
+            local ok, content = pcall(function() return game:HttpGet(src.url) end)
+            if not ok or not content or #content == 0 then
+                table.insert(errors, (src.name .. ": fetch failed"))
+            else
+                local loaded, loadErr = pcall(function() loadstring(content)() end)
+                if loaded then
+                    Rayfield:Destroy()
+                    Rayfield:Notify({
+                        Title = "empfi | Build a Brainrot Factory",
+                        Content = "Script updated successfully from " .. src.name,
+                        Duration = 5,
+                        Image = "loader",
+                    })
+                    return
+                else
+                    table.insert(errors, (src.name .. ": load error - " .. tostring(loadErr)))
+                end
+            end
+        end
+
+        -- All sources failed: open API page in host browser as a fallback
         local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
-        local ok, err = pcall(function()
-            -- Try to open the API URL in the host default browser using the prescribed command.
-            -- This relies on the devcontainer convention: use "$BROWSER" <url>
+        pcall(function()
             if type(os) == "table" and type(os.execute) == "function" then
                 os.execute(string.format('$BROWSER "%s"', apiUrl))
-            else
-                error("os.execute not available in this environment")
             end
         end)
 
-        if ok then
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Opened API link in host browser.",
-                Duration = 5,
-                Image = "loader",
-            })
-        else
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Failed to open API link: " .. tostring(err),
-                Duration = 5,
-                Image = "loader",
-            })
-        end
+        Rayfield:Notify({
+            Title = "empfi | Build a Brainrot Factory",
+            Content = "Update failed: " .. table.concat(errors, " | "),
+            Duration = 8,
+            Image = "loader",
+        })
     end,
 })
 
