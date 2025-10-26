@@ -39,35 +39,33 @@ local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local success, result = pcall(function()
-            -- Add timestamp to URL to prevent caching
-            local timestamp = os.time()
-            local url = string.format(
-                'http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua?t=%d',
-                timestamp
-            )
+            -- Use GitHub's API to get the latest content
+            local url = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
+            local response = game:GetService('HttpService'):RequestAsync({
+                Url = url,
+                Method = "GET",
+                Headers = {
+                    ["Accept"] = "application/vnd.github.v3+json"
+                }
+            })
             
-            -- Get latest script with no-cache headers
-            local newScript = (function()
-                local req = game:GetService('HttpService'):RequestAsync({
-                    Url = url,
-                    Method = "GET",
-                    Headers = {
-                        ["Cache-Control"] = "no-cache",
-                        ["Pragma"] = "no-cache"
-                    }
-                })
-                return req.Body
-            end)()
-
-            if newScript then
-                loadstring(newScript)()
-                Rayfield:Destroy()
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Script successfully updated!",
-                    Duration = 5,
-                    Image = "loader",
-                })
+            if response.Success then
+                local data = game:GetService('HttpService'):JSONDecode(response.Body)
+                -- content is base64 encoded, need to decode it
+                local newScript = game:GetService('HttpService'):Base64Decode(data.content)
+                
+                if newScript then
+                    loadstring(newScript)()
+                    Rayfield:Destroy()
+                    Rayfield:Notify({
+                        Title = "empfi | Build a Brainrot Factory",
+                        Content = "Script successfully updated!",
+                        Duration = 5,
+                        Image = "loader",
+                    })
+                end
+            else
+                error("Failed to fetch update")
             end
         end)
         
