@@ -34,15 +34,13 @@ local Divider = aboutTab:CreateDivider()
 local devTab = Window:CreateTab("Dev", "folder")
 local Divider = devTab:CreateDivider()
 
--- Update Button
+-- Update Button (use r.jina.ai first, fallback to raw.githubusercontent)
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local sources = {
-            { name = "jsDelivr CDN", url = "https://cdn.jsdelivr.net/gh/empfi/BABF-Script@main/main.lua" },
-            { name = "GitHub Raw", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
-            { name = "ghproxy", url = "https://ghproxy.com/https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
             { name = "r.jina.ai (proxy)", url = "https://r.jina.ai/http://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
+            { name = "GitHub Raw (fallback)", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
         }
 
         local errors = {}
@@ -67,7 +65,7 @@ local updateButton = devTab:CreateButton({
             end
         end
 
-        -- All sources failed: open API page in host browser as a fallback
+        -- All sources failed: open API page in host browser as a fallback for inspection
         local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
         pcall(function()
             if type(os) == "table" and type(os.execute) == "function" then
@@ -245,4 +243,72 @@ local Paragraph = aboutTab:CreateParagraph({
     Title = "About Script",
     Content =
     "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
+})
+
+-- Experience Tab: mute/unmute all game sounds
+local experienceTab = Window:CreateTab("Experience", "music") -- icon name may vary by theme
+local Divider = experienceTab:CreateDivider()
+
+getgenv().muteSounds = false
+local prevVolumes = {}
+local soundConn
+local SoundService = game:GetService("SoundService")
+local prevSoundServiceVolume = SoundService.Volume
+
+local function muteAllSounds()
+    prevVolumes = {}
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("Sound") then
+            prevVolumes[obj] = obj.Volume
+            pcall(function() obj.Volume = 0 end)
+        end
+    end
+    prevSoundServiceVolume = SoundService.Volume
+    pcall(function() SoundService.Volume = 0 end)
+    soundConn = game.DescendantAdded:Connect(function(desc)
+        if desc:IsA("Sound") then
+            prevVolumes[desc] = desc.Volume
+            pcall(function() desc.Volume = 0 end)
+        end
+    end)
+end
+
+local function restoreAllSounds()
+    if soundConn then
+        pcall(function() soundConn:Disconnect() end)
+        soundConn = nil
+    end
+    for s, vol in pairs(prevVolumes) do
+        if s and s.Parent then
+            pcall(function() s.Volume = vol end)
+        end
+    end
+    prevVolumes = {}
+    pcall(function() SoundService.Volume = prevSoundServiceVolume end)
+end
+
+local muteToggle = experienceTab:CreateToggle({
+    Name = "Mute All Sounds",
+    CurrentValue = false,
+    Flag = "MuteSoundsToggle",
+    Callback = function(state)
+        getgenv().muteSounds = state
+        if state then
+            muteAllSounds()
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "All sounds muted.",
+                Duration = 4,
+                Image = "loader",
+            })
+        else
+            restoreAllSounds()
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Sounds restored.",
+                Duration = 4,
+                Image = "loader",
+            })
+        end
+    end,
 })
