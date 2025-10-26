@@ -23,74 +23,86 @@ Rayfield:Notify({
     Duration = 5,
 })
 
--- Create Window with proper icons
+-- Define functions first
+-- Collect nearby collector pads.
+function nearbyCollect()
+    for _, m in pairs(c:GetChildren()) do
+        local prompt = m:IsA("Model") and m:FindFirstChild("CollectPrompt", true)
+        if prompt and prompt:IsA("ProximityPrompt") then
+            fireproximityprompt(prompt)
+        end
+    end
+end
+
+-- Anti Lag
+function antiLag()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local itemFolder = f:WaitForChild("Items")
+    if itemFolder then
+        itemFolder.Parent = replicatedStorage
+    end
+end
+
+-- Purchase
+local shopItems = {
+    "Basic Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
+    "Stair Conveyor", "Better Machine",
+    "Slide Conveyor", "Split Conveyor", "Doubler Collector", "Super Conveyor", "Super Upgrader",
+    "Super Collector", "Super Machine", "Heavenly Upgrader", "Heavenly Machine",
+}
+
+-- Global Variables
+getgenv().autoBuyEnabled, getgenv().autoCollect = false, false
+getgenv().selectedItems = { "Basic Conveyor" }
+
+-- Fix Auto-Buy function
+function autoBuy()
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local PurchaseRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Game"):WaitForChild("PurchaseItem")
+    
+    while getgenv().autoBuyEnabled do
+        if getgenv().selectedItems and #getgenv().selectedItems > 0 then
+            for _, item in ipairs(getgenv().selectedItems) do
+                if PurchaseRemote then
+                    PurchaseRemote:FireServer(item)
+                    task.wait(0.1) -- Add small delay between purchases
+                end
+            end
+        end
+        task.wait(1)
+    end
+end
+
+-- Create Window (remove problematic icon)
 local Window = Rayfield:CreateWindow({
     Name = "empfi | Build a Brainrot Factory",
     LoadingTitle = "empfi loading...",
     LoadingSubtitle = "by empfi",
-    ShowText = "empfi",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "empfi",
         FileName = "BABF-Config"
     },
-    KeySystem = false,
-    Icon = "rbxassetid://11419711755"  -- Added proper icon
+    KeySystem = false
 })
 
--- Create tabs with proper icons
-local MainTab = Window:CreateTab("Main", "rbxassetid://6026568198")
-local experienceTab = Window:CreateTab("Experience", "rbxassetid://6031280882")
-local aboutTab = Window:CreateTab("About", "rbxassetid://6026568198")
-local devTab = Window:CreateTab("Dev", "rbxassetid://6022668888")
-local lightingTab = Window:CreateTab("Lighting", "rbxassetid://6031075926")
+-- Create tabs with numeric IDs instead of asset URLs
+local MainTab = Window:CreateTab("Main", 4483362458)
+local experienceTab = Window:CreateTab("Experience", 4483362458)
+local aboutTab = Window:CreateTab("About", 4483362458)
+local devTab = Window:CreateTab("Dev", 4483362458)
+local lightingTab = Window:CreateTab("Lighting", 4483362458)
 
--- Create dividers after tabs are created
-local MainDivider = MainTab:CreateDivider()
-local expDivider = experienceTab:CreateDivider()
-local aboutDivider = aboutTab:CreateDivider()
-local devDivider = devTab:CreateDivider()
-local lightingDivider = lightingTab:CreateDivider()
-
--- Load saved configuration first
+-- Load configuration before creating UI elements
 local savedConfig = Window:LoadConfiguration()
-if savedConfig then
-    -- Restore Anti-Lag state
-    if savedConfig.Flags and savedConfig.Flags.AntiLagToggle then
-        task.spawn(function()
-            antiLag()
-            getgenv().antiLagEnabled = true
-        end)
-    end
-    
-    -- Restore Auto-Collect state
-    if savedConfig.Flags and savedConfig.Flags.AutoCollectToggle then
-        task.spawn(function()
-            getgenv().autoCollect = true
-            while getgenv().autoCollect do
-                nearbyCollect()
-                task.wait(0.1)
-            end
-        end)
-    end
 
-    -- Restore Auto-Buy state and items
-    if savedConfig.Flags and savedConfig.Flags.selectedItems then
-        getgenv().selectedItems = savedConfig.Flags.selectedItems
-    end
-    if savedConfig.Flags and savedConfig.Flags.AutoBuyToggle then
-        task.spawn(function()
-            getgenv().autoBuyEnabled = true
-            autoBuy()
-        end)
-    end
-end
+-- Create tab content in proper order
+MainTab:CreateLabel("Stand on the middle of collectors")
 
--- Now create all tab content in order
-MainTab:CreateLabel("Stand on the middle of collectors", "info")
-MainTab:CreateToggle({
+-- Main Tab Elements
+local collectToggle = MainTab:CreateToggle({
     Name = "Auto Collect Nearby Collectors",
-    CurrentValue = false,
+    CurrentValue = savedConfig and savedConfig.Flags and savedConfig.Flags.AutoCollectToggle or false,
     Flag = "AutoCollectToggle",
     Callback = function(state)
         getgenv().autoCollect = state
@@ -115,7 +127,7 @@ getgenv().antiLagEnabled = false
 
 local lagToggle = MainTab:CreateToggle({
     Name = "Anti Lag",
-    CurrentValue = false,
+    CurrentValue = savedConfig and savedConfig.Flags and savedConfig.Flags.AntiLagToggle or false,
     Flag = "AntiLagToggle",
     Callback = function(state)
         getgenv().antiLagEnabled = state
@@ -148,7 +160,7 @@ local lagToggle = MainTab:CreateToggle({
 local buyDropdown = MainTab:CreateDropdown({
     Name = "Select Item(s) to Buy",
     Options = shopItems,
-    CurrentOption = { "Basic Conveyor" },
+    CurrentOption = savedConfig and savedConfig.Flags and savedConfig.Flags.selectedItems or {"Basic Conveyor"},
     MultipleOptions = true,
     Flag = "selectedItems",
     Callback = function(Options)
@@ -160,7 +172,7 @@ local buyDropdown = MainTab:CreateDropdown({
 -- Toggle for auto-buy
 local buyToggle = MainTab:CreateToggle({
     Name = "Auto Buy",
-    CurrentValue = false,
+    CurrentValue = savedConfig and savedConfig.Flags and savedConfig.Flags.AutoBuyToggle or false,
     Flag = "AutoBuyToggle",
     Callback = function(state)
         getgenv().autoBuyEnabled = state
@@ -174,10 +186,10 @@ local buyToggle = MainTab:CreateToggle({
     end,
 })
 
--- Sound Control Toggle
+-- Experience Tab Elements
 local soundToggle = experienceTab:CreateToggle({
     Name = "Disable Game Sounds",
-    CurrentValue = false,
+    CurrentValue = savedConfig and savedConfig.Flags and savedConfig.Flags.DisableSoundsToggle or false,
     Flag = "DisableSoundsToggle",
     Callback = function(state)
         local soundService = game:GetService("SoundService")
@@ -201,17 +213,14 @@ local soundToggle = experienceTab:CreateToggle({
     end,
 })
 
-local Paragraph = aboutTab:CreateParagraph({
+-- About Tab Elements
+aboutTab:CreateParagraph({
     Title = "About Script",
-    Content =
-    "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script.",
+    Content = "Hey! This script is free and fully keyless! Enjoy building your Brainrot Factory with ease and efficiency using this script."
 })
 
--- Dev Tab (holds developer tools like the updater)
-local Divider = devTab:CreateDivider()
-
--- Update Button
-local updateButton = devTab:CreateButton({
+-- Dev Tab Elements
+devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local HttpService = game:GetService("HttpService")
@@ -307,55 +316,12 @@ p.Idled:Connect(function()
     end)
 end)
 
--- Collect nearby collector pads.
-function nearbyCollect()
-    for _, m in pairs(c:GetChildren()) do
-        local prompt = m:IsA("Model") and m:FindFirstChild("CollectPrompt", true)
-        if prompt and prompt:IsA("ProximityPrompt") then
-            fireproximityprompt(prompt)
-        end
+-- Save configuration before script ends
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function()
+    if Window then
+        Window:SaveConfiguration()
     end
-end
-
--- Anti Lag
-function antiLag()
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local itemFolder = f:WaitForChild("Items")
-    if itemFolder then
-        itemFolder.Parent = replicatedStorage
-    end
-end
-
--- Purchase
-local shopItems = {
-    "Basic Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
-    "Stair Conveyor", "Better Machine",
-    "Slide Conveyor", "Split Conveyor", "Doubler Collector", "Super Conveyor", "Super Upgrader",
-    "Super Collector", "Super Machine", "Heavenly Upgrader", "Heavenly Machine",
-}
-
-
--- Global Variables
-getgenv().autoBuyEnabled, getgenv().autoCollect = false, false
-getgenv().selectedItems = { "Basic Conveyor" }
-
--- Fix Auto-Buy function
-function autoBuy()
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local PurchaseRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Game"):WaitForChild("PurchaseItem")
-    
-    while getgenv().autoBuyEnabled do
-        if getgenv().selectedItems and #getgenv().selectedItems > 0 then
-            for _, item in ipairs(getgenv().selectedItems) do
-                if PurchaseRemote then
-                    PurchaseRemote:FireServer(item)
-                    task.wait(0.1) -- Add small delay between purchases
-                end
-            end
-        end
-        task.wait(1)
-    end
-end
+end)
 
 -- Add Lighting tab and buttons
 local lightingTab = Window:CreateTab("Lighting", 0)
