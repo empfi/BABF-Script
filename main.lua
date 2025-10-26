@@ -30,6 +30,10 @@ local Divider = MainTab:CreateDivider()
 local aboutTab = Window:CreateTab("About", "info")
 local Divider = aboutTab:CreateDivider()
 
+-- Dev Tab (holds developer tools like the updater)
+local devTab = Window:CreateTab("Dev", "folder")
+local Divider = devTab:CreateDivider()
+
 local plrs = game:GetService("Players")
 local p = plrs.LocalPlayer
 local f = workspace:WaitForChild(p.Name .. "Factory")
@@ -159,7 +163,8 @@ local lagToggle = MainTab:CreateToggle({
 })
 
 -- Update Button
-local updateButton = MainTab:CreateButton({
+-- Update Button moved to Dev tab
+local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
         local success, result = pcall(function()
