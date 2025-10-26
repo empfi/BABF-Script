@@ -97,6 +97,7 @@ local success, result = pcall(function()
 
     task.wait(0.5) -- Wait before creating tabs
 
+    debugLog("Creating tabs...")
     -- Create tabs safely
     local tabs = {
         Main = Window:CreateTab("Main", 0),
@@ -111,38 +112,63 @@ local success, result = pcall(function()
         if not tab then
             error("Failed to create " .. name .. " tab")
         end
+        debugLog(name .. " tab created successfully")
     end
 
-    -- Add Sound Toggle to Experience Tab
-    tabs.Experience:CreateToggle({
-        Name = "Disable Game Sounds",
-        CurrentValue = false,
-        Flag = "DisableSoundsToggle",
-        Callback = function(state)
-            local soundService = game:GetService("SoundService")
-            if state then
-                soundService.Volume = 0
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Game sounds disabled",
-                    Duration = 3,
-                    Image = "loader",
-                })
+    -- Add lighting controls directly instead of loading external module
+    debugLog("Adding lighting controls...")
+    tabs.Lighting:CreateButton({
+        Name = "Enhanced RTX",
+        Description = "Brighter RTX preset",
+        Callback = function()
+            local Lighting = game:GetService("Lighting")
+            local success, err = pcall(function()
+                -- Clean up existing effects
+                for _, v in pairs(Lighting:GetChildren()) do v:Destroy() end
+                
+                -- Create new effects
+                local effects = {
+                    Bloom = {
+                        Intensity = 0.5,
+                        Size = 12,
+                        Threshold = 0.8
+                    },
+                    ColorCorrection = {
+                        Brightness = 0.25,
+                        Contrast = 0.5,
+                        Saturation = -0.1,
+                        TintColor = Color3.fromRGB(255, 245, 235)
+                    },
+                    SunRays = {
+                        Intensity = 0.15,
+                        Spread = 0.8
+                    }
+                }
+
+                -- Apply effects
+                for name, props in pairs(effects) do
+                    local effect = Instance.new(name .. "Effect")
+                    for prop, value in pairs(props) do
+                        effect[prop] = value
+                    end
+                    effect.Parent = Lighting
+                end
+
+                -- Configure lighting
+                Lighting.Brightness = 2.8
+                Lighting.Ambient = Color3.fromRGB(25, 25, 25)
+                Lighting.ClockTime = 14
+                Lighting.ExposureCompensation = 0.8
+            end)
+
+            if not success then
+                warn("Failed to apply lighting:", err)
+                debugLog("Lighting error: " .. tostring(err))
             else
-                soundService.Volume = 1
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Game sounds enabled",
-                    Duration = 3,
-                    Image = "loader",
-                })
+                debugLog("Lighting applied successfully")
             end
         end
     })
-
-    -- Load lighting module
-    local lighting = loadstring(game:HttpGet('https://raw.githubusercontent.com/empfi/BABF-Script/main/lighting.lua'))()
-    lighting.createLightingTab(Window)
 
     -- Dev Tab (holds developer tools like the updater)
     local Divider = tabs.Dev:CreateDivider()
