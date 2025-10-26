@@ -67,35 +67,61 @@ local function applyRTXLighting()
 end
 
 local function createLightingTab(Window)
-    local lightingTab = Window:CreateTab("Lighting", 0)
-    local Divider = lightingTab:CreateDivider()
-
-    lightingTab:CreateButton({
-        Name = "RTX Lighting",
-        Description = "Enhanced brightness RTX preset",
+    local tab = Window:CreateTab("Lighting", 0)
+    
+    tab:CreateButton({
+        Name = "Enhanced RTX",
+        Description = "Brighter RTX preset",
         Callback = function()
-            applyRTXLighting()
-            Rayfield:Notify({
-                Title = "Success",
-                Content = "Enhanced RTX Lighting applied",
-                Duration = 3,
-            })
+            local Lighting = game:GetService("Lighting")
+            for _, v in pairs(Lighting:GetChildren()) do v:Destroy() end
+            
+            -- Enhanced brightness values
+            local settings = {
+                Bloom = {
+                    Intensity = 0.5,
+                    Size = 12,
+                    Threshold = 0.8
+                },
+                ColorCorrection = {
+                    Brightness = 0.25,
+                    Contrast = 0.5,
+                    Saturation = -0.1,
+                    TintColor = Color3.fromRGB(255, 245, 235)
+                },
+                SunRays = {
+                    Intensity = 0.15,
+                    Spread = 0.8
+                },
+                Atmosphere = {
+                    Density = 0.2,
+                    Offset = 0.5,
+                    Color = Color3.fromRGB(200, 200, 200),
+                    Decay = Color3.fromRGB(100, 100, 100),
+                    Glare = 0.3,
+                    Haze = 1.5
+                }
+            }
+
+            -- Apply settings
+            for name, props in pairs(settings) do
+                local effect = Instance.new(name .. "Effect")
+                for prop, value in pairs(props) do
+                    effect[prop] = value
+                end
+                effect.Parent = Lighting
+            end
+
+            Lighting.Brightness = 2.8
+            Lighting.Ambient = Color3.fromRGB(25, 25, 25)
+            Lighting.ClockTime = 14
+            Lighting.ExposureCompensation = 0.8
         end
     })
 
-    -- Keep existing Advanced Lighting button
-    lightingTab:CreateButton({
-        Name = "Advanced Lighting",
-        Description = "Load preset in lighting",
-        Callback = function()
-            -- ...existing Advanced Lighting implementation...
-        end
-    })
-
-    return lightingTab
+    return tab
 end
 
 return {
-    createLightingTab = createLightingTab,
-    applyRTXLighting = applyRTXLighting
+    createLightingTab = createLightingTab
 }
