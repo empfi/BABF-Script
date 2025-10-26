@@ -1,4 +1,20 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Safely load Rayfield UI (support loadstring or load). Exit early on failure to avoid hard errors.
+local Rayfield
+do
+    local ok, res = pcall(function()
+        local loader = loadstring or load
+        if not loader then
+            error("No loader available (loadstring/load is nil)")
+        end
+        local chunk = loader(game:HttpGet('https://sirius.menu/rayfield'))
+        return chunk()
+    end)
+    if not ok then
+        warn("Failed to load Rayfield UI: " .. tostring(res))
+        return
+    end
+    Rayfield = res
+end
 
 Rayfield:Notify({
     Title = "empfi | Build a Brainrot Factory",
@@ -125,8 +141,14 @@ local updateButton = devTab:CreateButton({
 })
 
 local plrs = game:GetService("Players")
-local p = plrs.LocalPlayer
-local f = workspace:WaitForChild(p.Name .. "Factory")
+-- Wait for LocalPlayer if not yet available
+local p = plrs.LocalPlayer or plrs.PlayerAdded:Wait()
+-- Wait for the player's factory to appear in workspace (safe lookup first)
+local fName = p.Name .. "Factory"
+local f = workspace:FindFirstChild(fName)
+if not f then
+    f = workspace:WaitForChild(fName)
+end
 local c = f:WaitForChild("Collectors")
 
 -- just found ts anti-afk ion if it works.
