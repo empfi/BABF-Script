@@ -38,13 +38,41 @@ local Divider = devTab:CreateDivider()
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
+        local HttpService = game:GetService("HttpService")
         local success, result = pcall(function()
-            -- Get raw content directly from GitHub
-            local rawUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
-            local newScript = game:HttpGet(rawUrl)
-            
-            if newScript then
-                loadstring(newScript)()
+            -- Try GitHub API first to get a reliable download_url for the latest file
+            local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
+            local downloadUrl
+            local ok, apiResp = pcall(function()
+                return game:HttpGet(apiUrl)
+            end)
+
+            if ok and apiResp then
+                local parsed
+                local decOk, decErr = pcall(function()
+                    parsed = HttpService:JSONDecode(apiResp)
+                end)
+                if decOk and parsed and parsed.download_url then
+                    downloadUrl = parsed.download_url
+                end
+            end
+
+            -- Fallback to raw GitHub URL if API failed or didn't provide download_url
+            if not downloadUrl then
+                downloadUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
+            end
+
+            -- Fetch the actual script content
+            local newScript = game:HttpGet(downloadUrl)
+            if newScript and #newScript > 0 then
+                local loadOk, loadErr = pcall(function()
+                    loadstring(newScript)()
+                end)
+                if not loadOk then
+                    error(("Failed to load updated script: %s"):format(tostring(loadErr)))
+                end
+
+                -- Clean up UI and notify
                 Rayfield:Destroy()
                 Rayfield:Notify({
                     Title = "empfi | Build a Brainrot Factory",
@@ -52,9 +80,11 @@ local updateButton = devTab:CreateButton({
                     Duration = 5,
                     Image = "loader",
                 })
+            else
+                error("Downloaded script is empty")
             end
         end)
-        
+
         if not success then
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
