@@ -1,4 +1,44 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Initialize settings table
+local settings = {
+    antiLag = false,
+    autoCollect = false,
+    autoBuy = false,
+    selectedItems = {"Basic Conveyor"},
+    soundDisabled = false
+}
+
+-- Load saved settings
+local success, savedSettings = pcall(function()
+    return game:GetService("HttpService"):JSONDecode(readfile("empfi_settings.json"))
+end)
+if success then
+    for k, v in pairs(savedSettings) do
+        settings[k] = v
+    end
+end
+
+-- Create UI first for faster loading
+local Window = Rayfield:CreateWindow({
+    Name = "empfi | Build a Brainrot Factory",
+    LoadingTitle = "empfi loading...",
+    LoadingSubtitle = "by empfi",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "empfi",
+        FileName = "BABF"
+    },
+    KeySystem = false,
+})
+
+-- Replace tab icons with proper Rayfield icons
+local MainTab = Window:CreateTab("Main", 4483362458)  -- Home icon
+local experienceTab = Window:CreateTab("Experience", 4483345998)  -- Settings icon
+local aboutTab = Window:CreateTab("About", 4483345737)  -- Info icon
+local devTab = Window:CreateTab("Dev", 4483344537)  -- Tools icon
+local lightingTab = Window:CreateTab("Lighting", 4483362839)  -- Effects icon
+
 local plrs = game:GetService("Players")
 
 -- Wait for LocalPlayer if script runs before player is available
@@ -23,24 +63,6 @@ Rayfield:Notify({
     Duration = 5,
 })
 
-local Window = Rayfield:CreateWindow({
-    Name = "empfi | Build a Brainrot Factory",
-    Icon = 0,  -- Add back icon
-    LoadingTitle = "empfi loading...",
-    LoadingSubtitle = "by empfi",
-    ShowText = "empfi",  -- Add back ShowText
-    Theme = "Default",   -- Add back Theme
-    ToggleUIKeybind = "K", -- Add back keybind
-    DisableRayfieldPrompts = true,
-    DisableBuildWarnings = false,
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "empfi",
-        FileName = "BABF"
-    },
-    KeySystem = false,
-})
-
 if not ok or not f then
     warn("Factory not found: " .. tostring(err))
     Rayfield:Notify({
@@ -59,14 +81,6 @@ if not c then
     c.Name = "Collectors"
     c.Parent = f
 end
-
--- Replace string icon names (which can error) with numeric 0 so tabs load reliably
-local MainTab = Window:CreateTab("Main", 0)
-local Divider = MainTab:CreateDivider()
-local experienceTab = Window:CreateTab("Experience", 0)
-local Divider = experienceTab:CreateDivider()
-local aboutTab = Window:CreateTab("About", 0)
-local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
 local devTab = Window:CreateTab("Dev", 0)
@@ -201,21 +215,70 @@ local shopItems = {
 getgenv().autoBuyEnabled, getgenv().autoCollect = false, false
 getgenv().selectedItems = { "Basic Conveyor" }
 
--- Auto Buy
+-- Auto Buy improved implementation
 function autoBuy()
-    while getgenv().autoBuyEnabled do
-        if getgenv().selectedItems and #getgenv().selectedItems > 0 then
-            for _, item in ipairs(getgenv().selectedItems) do
-                game:GetService("ReplicatedStorage")
-                    :WaitForChild("Remotes")
-                    :WaitForChild("Game")
-                    :WaitForChild("PurchaseItem")
-                    :FireServer(item)
-            end
+    while getgenv().autoBuyEnabled and task.wait(1) do
+        if not getgenv().selectedItems then return end
+        
+        local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes", true)
+        if not remote then return end
+        
+        local purchaseRemote = remote:FindFirstChild("PurchaseItem", true)
+        if not purchaseRemote then return end
+
+        for _, item in ipairs(getgenv().selectedItems) do
+            purchaseRemote:FireServer(item)
         end
-        task.wait(1)
     end
 end
+
+-- Save settings function
+local function saveSettings()
+    local dataToSave = {
+        antiLag = getgenv().antiLagEnabled,
+        autoCollect = getgenv().autoCollect,
+        autoBuy = getgenv().autoBuyEnabled,
+        selectedItems = getgenv().selectedItems,
+        soundDisabled = game:GetService("SoundService").Volume == 0
+    }
+    
+    pcall(function()
+        writefile("empfi_settings.json", game:GetService("HttpService"):JSONEncode(dataToSave))
+    end)
+end
+
+-- Apply saved settings
+if settings.antiLag then
+    antiLag()
+    getgenv().antiLagEnabled = true
+end
+
+if settings.autoCollect then
+    getgenv().autoCollect = true
+    task.spawn(function()
+        while getgenv().autoCollect do
+            nearbyCollect()
+            task.wait(0.1)
+        end
+    end)
+end
+
+if settings.autoBuy then
+    getgenv().autoBuyEnabled = true
+    getgenv().selectedItems = settings.selectedItems
+    task.spawn(autoBuy)
+end
+
+if settings.soundDisabled then
+    game:GetService("SoundService").Volume = 0
+end
+
+-- Save settings when closing
+game:GetService("CoreGui").ChildRemoved:Connect(function(child)
+    if child.Name == "Rayfield" then
+        saveSettings()
+    end
+end)
 
 local collectLabel = MainTab:CreateLabel("Stand on the middle of collectors", "info")
 local Toggle = MainTab:CreateToggle({
