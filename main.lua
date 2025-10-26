@@ -60,26 +60,46 @@ if not c then
     c.Parent = f
 end
 
--- Create all tabs first
+-- Create all tabs and their dividers first
 local MainTab = Window:CreateTab("Main", 0)
-local experienceTab = Window:CreateTab("Experience", 0)
-local lightingTab = Window:CreateTab("Lighting", 0)
-local aboutTab = Window:CreateTab("About", 0)
-local devTab = Window:CreateTab("Dev", 0)
+MainTab:CreateDivider()
 
--- Create experience tab content
+local experienceTab = Window:CreateTab("Experience", 0)
+experienceTab:CreateDivider()
+
+local lightingTab = Window:CreateTab("Lighting", 0)
+lightingTab:CreateDivider()
+
+local aboutTab = Window:CreateTab("About", 0)
+aboutTab:CreateDivider()
+
+local devTab = Window:CreateTab("Dev", 0)
+devTab:CreateDivider()
+
+-- Add Sound Toggle to Experience Tab
 experienceTab:CreateToggle({
     Name = "Disable Game Sounds",
     CurrentValue = false,
     Flag = "DisableSoundsToggle",
     Callback = function(state)
         local soundService = game:GetService("SoundService")
-        soundService.Volume = state and 0 or 1
-        Rayfield:Notify({
-            Title = "Sound Settings",
-            Content = state and "Game sounds disabled" or "Game sounds enabled",
-            Duration = 3
-        })
+        if state then
+            soundService.Volume = 0
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds disabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        else
+            soundService.Volume = 1
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Game sounds enabled",
+                Duration = 3,
+                Image = "loader",
+            })
+        end
     end
 })
 
