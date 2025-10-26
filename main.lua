@@ -38,105 +38,36 @@ local Divider = devTab:CreateDivider()
 local updateButton = devTab:CreateButton({
     Name = "Update Script",
     Callback = function()
-        local HttpService = game:GetService("HttpService")
-        local sources = {
-            { name = "jsDelivr CDN", url = "https://cdn.jsdelivr.net/gh/empfi/BABF-Script@main/main.lua" },
-            { name = "GitHub RAW", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
-        }
-
-        local apiUrl = "https://api.github.com/repos/empfi/BABF-Script/contents/main.lua"
-        local errors = {}
-        local fetchedScript
-
-        -- Try CDN/raw first
-        for _, src in ipairs(sources) do
-            local ok, resp = pcall(function() return game:HttpGet(src.url) end)
-            if ok and resp and #resp > 0 then
-                fetchedScript = resp
-                break
+        local success, result = pcall(function()
+            local rawUrl = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua"
+            local newScript = game:HttpGet(rawUrl)
+            
+            if newScript and #newScript > 0 then
+                -- Simple loadstring with error catching
+                local fn, loadErr = loadstring(newScript)
+                if not fn then error("Failed to compile: " .. tostring(loadErr)) end
+                
+                fn()  -- Execute the new script
+                Rayfield:Destroy()
+                Rayfield:Notify({
+                    Title = "empfi | Build a Brainrot Factory",
+                    Content = "Script successfully updated!",
+                    Duration = 5,
+                    Image = "loader",
+                })
             else
-                table.insert(errors, ("%s fetch failed: %s"):format(src.name, tostring(resp)))
-            end
-        end
-
-        -- If still not fetched, try GitHub API to get download_url
-        if not fetchedScript then
-            local ok, apiResp = pcall(function() return game:HttpGet(apiUrl) end)
-            if ok and apiResp then
-                local parsedOk, parsed = pcall(function() return HttpService:JSONDecode(apiResp) end)
-                if parsedOk and parsed and parsed.download_url then
-                    local ok2, resp2 = pcall(function() return game:HttpGet(parsed.download_url) end)
-                    if ok2 and resp2 and #resp2 > 0 then
-                        fetchedScript = resp2
-                    else
-                        table.insert(errors, ("GitHub download_url fetch failed: %s"):format(tostring(resp2)))
-                    end
-                else
-                    table.insert(errors, ("GitHub API parse failed: %s"):format(tostring(parsed)))
-                end
-            else
-                table.insert(errors, ("GitHub API fetch failed: %s"):format(tostring(apiResp)))
-            end
-        end
-
-        -- Try to load the script if fetched
-        if fetchedScript then
-            -- quick sanity check: avoid trying to load HTML/error pages as Lua
-            local preview = fetchedScript:sub(1, 300):gsub("\n", " ")
-            local lower = preview:lower()
-            local looksLikeHtml = lower:find("<!doctype") or lower:find("<html") or lower:find("<head") or lower:find("404") or lower:find("not found")
-            local looksLikeLua = (fetchedScript:match("Rayfield") or fetchedScript:match("CreateWindow") or fetchedScript:match("local Window")) and not looksLikeHtml
-            if not looksLikeLua then
-                table.insert(errors, ("Fetched content doesn't look like the expected script. Preview: %q"):format(preview))
-            else
-                -- Use loadstring or load, and handle compile/execute errors explicitly
-                local loader = loadstring or load
-                if not loader then
-                    table.insert(errors, "No loader available (loadstring/load is nil).")
-                else
-                    -- capture multiple returns: compiled chunk (or nil) and possible error message
-                    local okCompile, compiledOrNil, compileErr = pcall(function() return loader(fetchedScript, "empfi_update") end)
-                    if okCompile and type(compiledOrNil) == "function" then
-                        local okExec, execErr = pcall(compiledOrNil)
-                        if okExec then
-                            Rayfield:Destroy()
-                            Rayfield:Notify({
-                                Title = "empfi | Build a Brainrot Factory",
-                                Content = "Script successfully updated!",
-                                Duration = 5,
-                                Image = "loader",
-                            })
-                            return
-                        else
-                            table.insert(errors, ("Execution failed: %s"):format(tostring(execErr)))
-                        end
-                    else
-                        -- prefer the loader-provided error (compileErr) if present, otherwise stringify the first non-function return
-                        local compileMsg = compileErr or tostring(compiledOrNil)
-                        table.insert(errors, ("Compilation failed: %s"):format(tostring(compileMsg)))
-                        -- add hint when parser reports common truncation/syntax issues
-                        if compileMsg:lower():find("expected") or compileMsg:lower():find("parsing") then
-                            table.insert(errors, "Hint: the fetched file may be truncated or contain HTML (check the API/raw URL manually).")
-                        end
-                    end
-                end
-            end
-        end
-
-        -- All attempts failed: open API page in host browser and notify with collected errors
-        pcall(function()
-            if type(os) == "table" and type(os.execute) == "function" then
-                os.execute(string.format('$BROWSER "%s"', apiUrl))
+                error("Empty script received")
             end
         end)
-
-        Rayfield:Notify({
-            Title = "empfi | Build a Brainrot Factory",
-            Content = "Update failed. See console for details. Opened API page as fallback.",
-            Duration = 8,
-            Image = "loader",
-        })
-        warn("Update Script errors:\n" .. table.concat(errors, "\n"))
+        
+        if not success then
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Update failed: " .. tostring(result),
+                Duration = 6,
+                Image = "loader",
+            })
+        end
     end,
 })
 
