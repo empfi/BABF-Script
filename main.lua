@@ -1,29 +1,67 @@
+-- Debug function
+local function debugLog(msg)
+    print("[DEBUG] " .. msg)
+    if game:GetService("Players").LocalPlayer then
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Debug",
+            Text = msg,
+            Duration = 3
+        })
+    end
+end
+
 local success, result = pcall(function()
+    debugLog("Starting initialization...")
+    
     -- Initialize core services first
     local plrs = game:GetService("Players")
     local replicatedStorage = game:GetService("ReplicatedStorage")
     
-    -- Wait for player
+    debugLog("Waiting for player...")
+    -- Wait for player with timeout
+    local startTime = tick()
     local p
     repeat
         p = plrs.LocalPlayer
         task.wait(0.1)
-    until p
+    until p or (tick() - startTime) > 10
     
-    -- Initialize Rayfield with protection
-    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-    if not Rayfield then
-        error("Failed to load Rayfield")
+    if not p then
+        error("Failed to get LocalPlayer after 10 seconds")
     end
     
-    task.wait(0.5) -- Wait for Rayfield to initialize
+    debugLog("Loading Rayfield...")
+    -- Initialize Rayfield with retry
+    local Rayfield
+    for i = 1, 3 do
+        local ok, res = pcall(function()
+            return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+        end)
+        if ok and res then
+            Rayfield = res
+            break
+        end
+        task.wait(1)
+    end
+    
+    if not Rayfield then
+        error("Failed to load Rayfield after 3 attempts")
+    end
 
-    -- Create window
+    task.wait(1) -- Extended wait for Rayfield
+
+    debugLog("Creating window...")
+    -- Create window with all required properties
     local Window = Rayfield:CreateWindow({
         Name = "empfi | Build a Brainrot Factory",
         Icon = 0,
         LoadingTitle = "empfi loading...",
         LoadingSubtitle = "by empfi",
+        ShowText = "empfi",
+        Theme = "Default",
+        ToggleUIKeybind = "K",
+        DisableRayfieldPrompts = true,
+        DisableBuildWarnings = false,
         ConfigurationSaving = {
             Enabled = true,
             FolderName = "empfi",
@@ -36,7 +74,8 @@ local success, result = pcall(function()
         error("Failed to create window")
     end
 
-    task.wait(0.5) -- Wait before finding factory
+    task.wait(1) -- Extended wait after window creation
+    debugLog("Window created successfully")
 
     -- Safe factory initialization
     local f = workspace:FindFirstChild(p.Name .. "Factory")
@@ -352,8 +391,8 @@ if not success then
     if game:GetService("Players").LocalPlayer then
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "Script Error",
-            Text = "Failed to initialize. Check console for details.",
-            Duration = 5
+            Text = tostring(result),
+            Duration = 10
         })
     end
 end
