@@ -27,6 +27,29 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", "tractor")
 local Divider = MainTab:CreateDivider()
+
+-- Add Experience Tab
+local experienceTab = Window:CreateTab("Experience", "sound")
+local Divider = experienceTab:CreateDivider()
+
+-- Sound Toggle
+local soundToggle = experienceTab:CreateToggle({
+    Name = "Game Sounds",
+    CurrentValue = true,
+    Flag = "SoundToggle",
+    Callback = function(state)
+        local soundService = game:GetService("SoundService")
+        soundService.Volume = state and 1 or 0
+        
+        Rayfield:Notify({
+            Title = "empfi | Build a Brainrot Factory",
+            Content = state and "Game Sounds Enabled" or "Game Sounds Disabled",
+            Duration = 3,
+            Image = "sound",
+        })
+    end,
+})
+
 local aboutTab = Window:CreateTab("About", "info")
 local Divider = aboutTab:CreateDivider()
 
