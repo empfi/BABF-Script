@@ -34,6 +34,37 @@ local Divider = aboutTab:CreateDivider()
 local devTab = Window:CreateTab("Dev", "folder")
 local Divider = devTab:CreateDivider()
 
+-- Update Button
+local updateButton = devTab:CreateButton({
+    Name = "Update Script",
+    Callback = function()
+        local success, result = pcall(function()
+            local newScript = game:HttpGet('http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua')
+            if newScript then
+                -- Load the new script
+                loadstring(newScript)()
+                -- Destroy the current UI
+                Rayfield:Destroy()
+                Rayfield:Notify({
+                    Title = "empfi | Build a Brainrot Factory",
+                    Content = "Script successfully updated!",
+                    Duration = 5,
+                    Image = "loader",
+                })
+            end
+        end)
+        
+        if not success then
+            Rayfield:Notify({
+                Title = "empfi | Build a Brainrot Factory",
+                Content = "Failed to update script. Please try again later.",
+                Duration = 5,
+                Image = "loader",
+            })
+        end
+    end,
+})
+
 local plrs = game:GetService("Players")
 local p = plrs.LocalPlayer
 local f = workspace:WaitForChild(p.Name .. "Factory")
@@ -155,38 +186,6 @@ local lagToggle = MainTab:CreateToggle({
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
                 Content = "Anti Lag Disabled",
-                Duration = 5,
-                Image = "loader",
-            })
-        end
-    end,
-})
-
--- Update Button
--- Update Button moved to Dev tab
-local updateButton = devTab:CreateButton({
-    Name = "Update Script",
-    Callback = function()
-        local success, result = pcall(function()
-            local newScript = game:HttpGet('http://raw.githubusercontent.com/empfi/BABF-Script/refs/heads/main/main.lua')
-            if newScript then
-                -- Load the new script
-                loadstring(newScript)()
-                -- Destroy the current UI
-                Rayfield:Destroy()
-                Rayfield:Notify({
-                    Title = "empfi | Build a Brainrot Factory",
-                    Content = "Script successfully updated!",
-                    Duration = 5,
-                    Image = "loader",
-                })
-            end
-        end)
-        
-        if not success then
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Failed to update script. Please try again later.",
                 Duration = 5,
                 Image = "loader",
             })
