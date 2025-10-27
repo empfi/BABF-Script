@@ -1,5 +1,31 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local plrs = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+-- Lightweight local module loader (executor FS or fallback)
+local function loadLocalModule(path)
+    local ok, src = pcall(function()
+        return readfile and readfile(path)
+    end)
+    if ok and type(src) == "string" and #src > 0 then
+        local fn = loadstring(src)
+        if fn then
+            local success, mod = pcall(fn)
+            if success then return mod end
+        end
+    end
+    return nil
+end
+
+local LightingMod = loadLocalModule("lighting.lua")
+local Config = loadLocalModule("config.lua")
+local cfg = Config and Config.load() or {
+    autoCollect = false,
+    antiLagEnabled = false,
+    autoBuyEnabled = false,
+    selectedItems = {"Basic Conveyor"},
+    lighting = { preset = "none", shadowsDisabled = false },
+}
 
 -- Wait for LocalPlayer if script runs before player is available
 local p = plrs.LocalPlayer
@@ -198,19 +224,49 @@ local shopItems = {
 
 
 -- Global Variables
-getgenv().autoBuyEnabled, getgenv().autoCollect = false, false
-getgenv().selectedItems = { "Basic Conveyor" }
+getgenv().autoBuyEnabled, getgenv().autoCollect = cfg.autoBuyEnabled, cfg.autoCollect
+getgenv().selectedItems = cfg.selectedItems or { "Basic Conveyor" }
 
 -- Auto Buy
+local function tryPurchaseViaRemote(item)
+    local ok = pcall(function()
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Remotes")
+            :WaitForChild("Game")
+            :WaitForChild("PurchaseItem")
+            :FireServer(item)
+    end)
+    return ok
+end
+
+local function tryPurchaseViaPrompts(item)
+    if not f then return false end
+    local matched = false
+    for _, obj in ipairs(f:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local parentName = obj.Parent and obj.Parent.Name or ""
+            local action = (obj.ActionText or "") .. " " .. (obj.ObjectText or "")
+            if string.find(string.lower(parentName), string.lower(item), 1, true)
+                or string.find(string.lower(action), string.lower(item), 1, true) then
+                pcall(function() fireproximityprompt(obj) end)
+                matched = true
+            end
+        end
+    end
+    return matched
+end
+
 function autoBuy()
     while getgenv().autoBuyEnabled do
         if getgenv().selectedItems and #getgenv().selectedItems > 0 then
             for _, item in ipairs(getgenv().selectedItems) do
-                game:GetService("ReplicatedStorage")
-                    :WaitForChild("Remotes")
-                    :WaitForChild("Game")
-                    :WaitForChild("PurchaseItem")
-                    :FireServer(item)
+                local okRemote = tryPurchaseViaRemote(item)
+                if not okRemote then
+                    tryPurchaseViaPrompts(item)
+                else
+                    -- Also try prompts as a backup to ensure pad purchases
+                    tryPurchaseViaPrompts(item)
+                end
             end
         end
         task.wait(1)
@@ -220,10 +276,12 @@ end
 local collectLabel = MainTab:CreateLabel("Stand on the middle of collectors", "info")
 local Toggle = MainTab:CreateToggle({
     Name = "Auto Collect Nearby Collectors",
-    CurrentValue = false,
+    CurrentValue = cfg.autoCollect,
     Flag = "AutoCollectToggle",
     Callback = function(state)
         getgenv().autoCollect = state
+        cfg.autoCollect = state
+        if Config then Config.save(cfg) end
         if state then
             print("Auto Collect: ON")
             task.spawn(function()
@@ -241,14 +299,16 @@ local Toggle = MainTab:CreateToggle({
 
 
 -- Anti Lag Toggle
-getgenv().antiLagEnabled = false
+getgenv().antiLagEnabled = cfg.antiLagEnabled
 
 local lagToggle = MainTab:CreateToggle({
     Name = "Anti Lag",
-    CurrentValue = false,
+    CurrentValue = cfg.antiLagEnabled,
     Flag = "AntiLagToggle",
     Callback = function(state)
         getgenv().antiLagEnabled = state
+        cfg.antiLagEnabled = state
+        if Config then Config.save(cfg) end
         if state then
             antiLag()
             Rayfield:Notify({
@@ -278,11 +338,13 @@ local lagToggle = MainTab:CreateToggle({
 local buyDropdown = MainTab:CreateDropdown({
     Name = "Select Item(s) to Buy",
     Options = shopItems,
-    CurrentOption = { "Basic Conveyor" },
+    CurrentOption = getgenv().selectedItems,
     MultipleOptions = true,
     Flag = "selectedItems",
     Callback = function(Options)
         getgenv().selectedItems = Options
+        cfg.selectedItems = Options
+        if Config then Config.save(cfg) end
         --print("Selected:", table.concat(getgenv().selectedItems, ", "))
     end,
 })
@@ -290,10 +352,12 @@ local buyDropdown = MainTab:CreateDropdown({
 -- Toggle for auto-buy
 local buyToggle = MainTab:CreateToggle({
     Name = "Auto Buy",
-    CurrentValue = false,
+    CurrentValue = cfg.autoBuyEnabled,
     Flag = "AutoBuyToggle",
     Callback = function(state)
         getgenv().autoBuyEnabled = state
+        cfg.autoBuyEnabled = state
+        if Config then Config.save(cfg) end
         if state then
             print("Auto Buy: ON")
             -- run autoBuy in a new task so the UI thread isn't blocked
@@ -354,74 +418,11 @@ lightingTab:CreateButton({
                     Accept = {
                         Name = "Apply",
                         Callback = function()
-                            -- RTX lighting implementation
-                            local Lighting = game:GetService("Lighting")
-                            -- Remove existing effects
-                            for i, v in pairs(Lighting:GetChildren()) do
-                                if v then
-                                    v:Destroy()
-                                end
+                            if LightingMod and LightingMod.applyRTX then
+                                LightingMod.applyRTX()
                             end
-
-                            -- Create and setup effects
-                            local Bloom = Instance.new("BloomEffect")
-                            local Blur = Instance.new("BlurEffect")
-                            local ColorCor = Instance.new("ColorCorrectionEffect")
-                            local SunRays = Instance.new("SunRaysEffect")
-                            local Sky = Instance.new("Sky")
-                            local Atm = Instance.new("Atmosphere")
-
-                            Bloom.Parent = Lighting
-                            Blur.Parent = Lighting
-                            ColorCor.Parent = Lighting
-                            SunRays.Parent = Lighting
-                            Sky.Parent = Lighting
-                            Atm.Parent = Lighting
-
-                            -- Configure effects
-                            Bloom.Intensity = 0.3
-                            Bloom.Size = 10
-                            Bloom.Threshold = 0.8
-
-                            Blur.Size = 5
-
-                            ColorCor.Brightness = 0.2  -- Increased from 0.1
-                            ColorCor.Contrast = 0.4    -- Reduced from 0.5 for better visibility
-                            ColorCor.Saturation = -0.2 -- Increased from -0.3
-                            ColorCor.TintColor = Color3.fromRGB(255, 245, 220)  -- Warmer tint
-
-                            SunRays.Intensity = 0.075
-                            SunRays.Spread = 0.727
-
-                            Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"
-                            Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
-                            Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"
-                            Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
-                            Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"
-                            Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
-                            Sky.SunAngularSize = 10
-
-                            -- Configure lighting
-                            Lighting.Ambient = Color3.fromRGB(25, 25, 25)      -- Brighter ambient
-                            Lighting.Brightness = 2.75                         -- Increased from 2.25
-                            Lighting.ColorShift_Bottom = Color3.fromRGB(0,0,0)
-                            Lighting.ColorShift_Top = Color3.fromRGB(0,0,0)
-                            Lighting.EnvironmentDiffuseScale = 0.2
-                            Lighting.EnvironmentSpecularScale = 0.2
-                            Lighting.GlobalShadows = true
-                            Lighting.OutdoorAmbient = Color3.fromRGB(25, 25, 25)  -- Brighter outdoor
-                            Lighting.ShadowSoftness = 0.2
-                            Lighting.ClockTime = 7
-                            Lighting.GeographicLatitude = 25
-                            Lighting.ExposureCompensation = 0.5
-
-                            Atm.Density = 0
-                            Atm.Offset = 0.556
-                            Atm.Color = Color3.fromRGB(0, 0, 0)
-                            Atm.Decay = Color3.fromRGB(0, 0, 0)
-                            Atm.Glare = 0
-                            Atm.Haze = 1.72
-
+                            cfg.lighting.preset = "rtx"
+                            if Config then Config.save(cfg) end
                             Rayfield:Notify({
                                 Title = "Success",
                                 Content = "RTX Lighting applied",
@@ -435,74 +436,11 @@ lightingTab:CreateButton({
                 }
             })
         else
-            -- Fallback if prompt not available
-            local Lighting = game:GetService("Lighting")
-            -- Remove existing effects
-            for i, v in pairs(Lighting:GetChildren()) do
-                if v then
-                    v:Destroy()
-                end
+            if LightingMod and LightingMod.applyRTX then
+                LightingMod.applyRTX()
             end
-
-            -- Create and setup effects
-            local Bloom = Instance.new("BloomEffect")
-            local Blur = Instance.new("BlurEffect")
-            local ColorCor = Instance.new("ColorCorrectionEffect")
-            local SunRays = Instance.new("SunRaysEffect")
-            local Sky = Instance.new("Sky")
-            local Atm = Instance.new("Atmosphere")
-
-            Bloom.Parent = Lighting
-            Blur.Parent = Lighting
-            ColorCor.Parent = Lighting
-            SunRays.Parent = Lighting
-            Sky.Parent = Lighting
-            Atm.Parent = Lighting
-
-            -- Configure effects
-            Bloom.Intensity = 0.3
-            Bloom.Size = 10
-            Bloom.Threshold = 0.8
-
-            Blur.Size = 5
-
-            ColorCor.Brightness = 0.2  -- Increased from 0.1
-            ColorCor.Contrast = 0.4    -- Reduced from 0.5 for better visibility
-            ColorCor.Saturation = -0.2 -- Increased from -0.3
-            ColorCor.TintColor = Color3.fromRGB(255, 245, 220)  -- Warmer tint
-
-            SunRays.Intensity = 0.075
-            SunRays.Spread = 0.727
-
-            Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"
-            Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
-            Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"
-            Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
-            Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"
-            Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
-            Sky.SunAngularSize = 10
-
-            -- Configure lighting
-            Lighting.Ambient = Color3.fromRGB(25, 25, 25)      -- Brighter ambient
-            Lighting.Brightness = 2.75                         -- Increased from 2.25
-            Lighting.ColorShift_Bottom = Color3.fromRGB(0,0,0)
-            Lighting.ColorShift_Top = Color3.fromRGB(0,0,0)
-            Lighting.EnvironmentDiffuseScale = 0.2
-            Lighting.EnvironmentSpecularScale = 0.2
-            Lighting.GlobalShadows = true
-            Lighting.OutdoorAmbient = Color3.fromRGB(25, 25, 25)  -- Brighter outdoor
-            Lighting.ShadowSoftness = 0.2
-            Lighting.ClockTime = 7
-            Lighting.GeographicLatitude = 25
-            Lighting.ExposureCompensation = 0.5
-
-            Atm.Density = 0
-            Atm.Offset = 0.556
-            Atm.Color = Color3.fromRGB(0, 0, 0)
-            Atm.Decay = Color3.fromRGB(0, 0, 0)
-            Atm.Glare = 0
-            Atm.Haze = 1.72
-
+            cfg.lighting.preset = "rtx"
+            if Config then Config.save(cfg) end
             Rayfield:Notify({
                 Title = "Success",
                 Content = "RTX Lighting applied",
@@ -525,63 +463,11 @@ lightingTab:CreateButton({
                     Accept = {
                         Name = "Apply",
                         Callback = function()
-                            -- Advanced lighting implementation
-                            local Lighting = game:GetService("Lighting")
-                            -- Remove existing effects
-                            for i, v in pairs(Lighting:GetChildren()) do
-                                if v then
-                                    v:Destroy()
-                                end
+                            if LightingMod and LightingMod.applyAdvanced then
+                                LightingMod.applyAdvanced()
                             end
-
-                            -- Create and setup effects
-                            local Sky = Instance.new("Sky")
-                            local Bloom = Instance.new("BloomEffect")
-                            local ColorC = Instance.new("ColorCorrectionEffect")
-                            local SunRays = Instance.new("SunRaysEffect")
-
-                            -- Configure effects
-                            Sky.MoonAngularSize = 11
-                            Sky.MoonTextureId = "rbxasset://sky/moon.jpg"
-                            Sky.SkyboxBk = "rbxassetid://17843929750"
-                            Sky.SkyboxDn = "rbxassetid://17843931996"
-                            Sky.SkyboxFt = "rbxassetid://17843931265"
-                            Sky.SkyboxLf = "rbxassetid://17843929139"
-                            Sky.SkyboxRt = "rbxassetid://17843930617"
-                            Sky.SkyboxUp = "rbxassetid://17843932671"
-                            Sky.StarCount = 3000
-                            Sky.SunAngularSize = 21
-                            Sky.SunTextureId = "rbxasset://sky/sun.jpg"
-
-                            Bloom.Enabled = true
-                            Bloom.Intensity = 0.65
-                            Bloom.Size = 8
-                            Bloom.Threshold = 0.9
-
-                            ColorC.Brightness = 0
-                            ColorC.Contrast = 0.05
-                            ColorC.Enabled = true
-                            ColorC.Saturation = 0.2
-                            ColorC.TintColor = Color3.new(1, 1, 1)
-
-                            SunRays.Intensity = 0.25
-                            SunRays.Spread = 1
-                            SunRays.Enabled = true
-
-                            -- Parent effects to lighting
-                            Sky.Parent = Lighting
-                            Bloom.Parent = Lighting
-                            ColorC.Parent = Lighting
-                            SunRays.Parent = Lighting
-
-                            -- Configure lighting
-                            Lighting.Brightness = 1.43
-                            Lighting.Ambient = Color3.new(0.243137, 0.243137, 0.243137)
-                            Lighting.ShadowSoftness = 0.4
-                            Lighting.ClockTime = 13.4
-                            Lighting.OutdoorAmbient = Color3.new(0.243137, 0.243137, 0.243137)
-                            Lighting.GlobalShadows = true
-
+                            cfg.lighting.preset = "advanced"
+                            if Config then Config.save(cfg) end
                             Rayfield:Notify({
                                 Title = "Success",
                                 Content = "Advanced Lighting applied",
@@ -595,63 +481,11 @@ lightingTab:CreateButton({
                 }
             })
         else
-            -- Fallback if prompt not available
-            local Lighting = game:GetService("Lighting")
-            -- Remove existing effects
-            for i, v in pairs(Lighting:GetChildren()) do
-                if v then
-                    v:Destroy()
-                end
+            if LightingMod and LightingMod.applyAdvanced then
+                LightingMod.applyAdvanced()
             end
-
-            -- Create and setup effects
-            local Sky = Instance.new("Sky")
-            local Bloom = Instance.new("BloomEffect")
-            local ColorC = Instance.new("ColorCorrectionEffect")
-            local SunRays = Instance.new("SunRaysEffect")
-
-            -- Configure effects
-            Sky.MoonAngularSize = 11
-            Sky.MoonTextureId = "rbxasset://sky/moon.jpg"
-            Sky.SkyboxBk = "rbxassetid://17843929750"
-            Sky.SkyboxDn = "rbxassetid://17843931996"
-            Sky.SkyboxFt = "rbxassetid://17843931265"
-            Sky.SkyboxLf = "rbxassetid://17843929139"
-            Sky.SkyboxRt = "rbxassetid://17843930617"
-            Sky.SkyboxUp = "rbxassetid://17843932671"
-            Sky.StarCount = 3000
-            Sky.SunAngularSize = 21
-            Sky.SunTextureId = "rbxasset://sky/sun.jpg"
-
-            Bloom.Enabled = true
-            Bloom.Intensity = 0.65
-            Bloom.Size = 8
-            Bloom.Threshold = 0.9
-
-            ColorC.Brightness = 0
-            ColorC.Contrast = 0.05
-            ColorC.Enabled = true
-            ColorC.Saturation = 0.2
-            ColorC.TintColor = Color3.new(1, 1, 1)
-
-            SunRays.Intensity = 0.25
-            SunRays.Spread = 1
-            SunRays.Enabled = true
-
-            -- Parent effects to lighting
-            Sky.Parent = Lighting
-            Bloom.Parent = Lighting
-            ColorC.Parent = Lighting
-            SunRays.Parent = Lighting
-
-            -- Configure lighting
-            Lighting.Brightness = 1.43
-            Lighting.Ambient = Color3.new(0.243137, 0.243137, 0.243137)
-            Lighting.ShadowSoftness = 0.4
-            Lighting.ClockTime = 13.4
-            Lighting.OutdoorAmbient = Color3.new(0.243137, 0.243137, 0.243137)
-            Lighting.GlobalShadows = true
-
+            cfg.lighting.preset = "advanced"
+            if Config then Config.save(cfg) end
             Rayfield:Notify({
                 Title = "Success",
                 Content = "Advanced Lighting applied",
@@ -660,3 +494,41 @@ lightingTab:CreateButton({
         end
     end
 })
+
+-- Lighting: Disable Shadows toggle
+local disableShadowsToggle = lightingTab:CreateToggle({
+    Name = "Disable Shadows",
+    CurrentValue = cfg.lighting and cfg.lighting.shadowsDisabled or false,
+    Flag = "DisableShadowsToggle",
+    Callback = function(state)
+        if LightingMod and LightingMod.disableShadows then
+            LightingMod.disableShadows(state)
+        else
+            local Lighting = game:GetService("Lighting")
+            Lighting.GlobalShadows = not state
+            Lighting.ShadowSoftness = state and 0 or 0.4
+        end
+        cfg.lighting = cfg.lighting or {}
+        cfg.lighting.shadowsDisabled = state
+        if Config then Config.save(cfg) end
+        Rayfield:Notify({
+            Title = "Lighting",
+            Content = state and "Shadows disabled" or "Shadows enabled",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Apply saved lighting preset on load
+task.spawn(function()
+    if LightingMod then
+        if cfg.lighting and cfg.lighting.preset == "rtx" and LightingMod.applyRTX then
+            LightingMod.applyRTX()
+        elseif cfg.lighting and cfg.lighting.preset == "advanced" and LightingMod.applyAdvanced then
+            LightingMod.applyAdvanced()
+        end
+        if cfg.lighting and cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
+            LightingMod.disableShadows(true)
+        end
+    end
+end)
