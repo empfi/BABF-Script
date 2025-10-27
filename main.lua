@@ -30,7 +30,7 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "by empfi",
     ShowText = "empfi",  -- Add back ShowText
     Theme = "Default",   -- Add back Theme
-    ToggleUIKeybind = "J", -- Add back keybind
+    ToggleUIKeybind = "K", -- Add back keybind
     DisableRayfieldPrompts = true,
     DisableBuildWarnings = false,
     ConfigurationSaving = {
@@ -520,7 +520,7 @@ lightingTab:CreateButton({
         if Window.CreatePrompt then -- Check if prompt exists
             Window:CreatePrompt({
                 Title = "Apply Advanced Lighting?", 
-                Content = "This will change your lighting settings and may affect performance, based on the choosen option!",
+                Content = "This will change your lighting settings and may affect performance.",
                 Actions = {
                     Accept = {
                         Name = "Apply",
