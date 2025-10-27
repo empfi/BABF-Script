@@ -1,6 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local plrs = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 -- Lightweight local module loader (executor FS or fallback)
 local function loadLocalModule(path)
@@ -12,6 +13,24 @@ local function loadLocalModule(path)
         if fn then
             local success, mod = pcall(fn)
             if success then return mod end
+        end
+    end
+    -- HTTP fallback from GitHub
+    local urlMap = {
+        ["lighting.lua"] = "https://raw.githubusercontent.com/empfi/BABF-Script/main/lighting.lua",
+        ["config.lua"]   = "https://raw.githubusercontent.com/empfi/BABF-Script/main/config.lua",
+    }
+    local url = urlMap[path]
+    if url then
+        local okHttp, body = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if okHttp and type(body) == "string" and #body > 0 then
+            local fn = loadstring(body)
+            if fn then
+                local success, mod = pcall(fn)
+                if success then return mod end
+            end
         end
     end
     return nil
@@ -151,7 +170,6 @@ local updateButton = devTab:CreateButton({
                     Title = "empfi | Build a Brainrot Factory",
                     Content = "Script successfully updated!",
                     Duration = 5,
-                    Image = "loader",
                 })
                 return
             else
@@ -170,7 +188,6 @@ local updateButton = devTab:CreateButton({
             Title = "empfi | Build a Brainrot Factory",
             Content = "Update failed. See console for details. Opened API page as fallback.",
             Duration = 8,
-            Image = "loader",
         })
         warn("Update Script errors:\n" .. table.concat(errors, "\n"))
     end,
@@ -228,12 +245,15 @@ getgenv().selectedItems = cfg.selectedItems or { "Basic Conveyor" }
 
 -- Auto Buy
 local function tryPurchaseViaRemote(item)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local ok = pcall(function()
-        game:GetService("ReplicatedStorage")
-            :WaitForChild("Remotes")
-            :WaitForChild("Game")
-            :WaitForChild("PurchaseItem")
-            :FireServer(item)
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 2)
+        if not remotes then return end
+        local gameFolder = remotes:FindFirstChild("Game") or remotes:WaitForChild("Game", 2)
+        if not gameFolder then return end
+        local purchase = gameFolder:FindFirstChild("PurchaseItem") or gameFolder:WaitForChild("PurchaseItem", 2)
+        if not purchase then return end
+        purchase:FireServer(item)
     end)
     return ok
 end
@@ -241,12 +261,19 @@ end
 local function tryPurchaseViaPrompts(item)
     if not f then return false end
     local matched = false
+    local keywords = {"buy","purchase","unlock","acquire"}
     for _, obj in ipairs(f:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
             local parentName = obj.Parent and obj.Parent.Name or ""
-            local action = (obj.ActionText or "") .. " " .. (obj.ObjectText or "")
-            if string.find(string.lower(parentName), string.lower(item), 1, true)
-                or string.find(string.lower(action), string.lower(item), 1, true) then
+            local actionText = string.lower((obj.ActionText or ""))
+            local objectText = string.lower((obj.ObjectText or ""))
+            local fullname = string.lower(parentName .. " " .. actionText .. " " .. objectText)
+            local it = string.lower(item)
+            local keywordHit = false
+            for _, kw in ipairs(keywords) do
+                if string.find(fullname, kw, 1, true) then keywordHit = true break end
+            end
+            if (string.find(fullname, it, 1, true) or keywordHit) and obj.Enabled ~= false then
                 pcall(function() fireproximityprompt(obj) end)
                 matched = true
             end
@@ -268,7 +295,7 @@ function autoBuy()
                 end
             end
         end
-        task.wait(1)
+        task.wait(0.5)
     end
 end
 
@@ -314,7 +341,6 @@ local lagToggle = MainTab:CreateToggle({
                 Title = "empfi | Build a Brainrot Factory",
                 Content = "Anti Lag Enabled",
                 Duration = 5,
-                Image = "loader",
             })
         else
             -- Restore items folder back to the factory
@@ -327,7 +353,6 @@ local lagToggle = MainTab:CreateToggle({
                 Title = "empfi | Build a Brainrot Factory",
                 Content = "Anti Lag Disabled",
                 Duration = 5,
-                Image = "loader",
             })
         end
     end,
@@ -408,7 +433,6 @@ local soundToggle = experienceTab:CreateToggle({
             Title = "empfi | Build a Brainrot Factory",
             Content = state and "Game sounds disabled" or "Game sounds enabled",
             Duration = 3,
-            Image = "loader",
         })
     end,
 })
@@ -426,19 +450,59 @@ local Divider = lightingTab:CreateDivider()
 -- Graphics section
 lightingTab:CreateLabel("Graphics Presets")
 local rtxToggleUI, advToggleUI
+local __suppressLightingToggle = false
+local function applyLighting(preset)
+    if not LightingMod then return end
+    if preset == "rtx" and LightingMod.applyRTX then
+        LightingMod.applyRTX()
+    elseif preset == "advanced" and LightingMod.applyAdvanced then
+        LightingMod.applyAdvanced()
+    elseif LightingMod.applyDefault then
+        LightingMod.applyDefault()
+    end
+    -- short watchdog: some games override lighting immediately; reapply once if stripped
+    task.delay(0.2, function()
+        local Lighting = game:GetService("Lighting")
+        local hasEffects = false
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("BloomEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("DepthOfFieldEffect") then
+                hasEffects = true; break
+            end
+        end
+        if preset ~= "none" and not hasEffects then
+            if preset == "rtx" and LightingMod.applyRTX then
+                LightingMod.applyRTX()
+            elseif preset == "advanced" and LightingMod.applyAdvanced then
+                LightingMod.applyAdvanced()
+            end
+        end
+        if cfg.lighting and cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
+            LightingMod.disableShadows(true)
+        end
+    end)
+end
+
 rtxToggleUI = lightingTab:CreateToggle({
     Name = "RTX Lighting",
     CurrentValue = cfg.lighting and cfg.lighting.preset == "rtx",
     Flag = "RTXLightingToggle",
     Callback = function(state)
+        if __suppressLightingToggle then return end
         if state then
-            if LightingMod and LightingMod.applyRTX then LightingMod.applyRTX() end
+            applyLighting("rtx")
             cfg.lighting.preset = "rtx"
-            if advToggleUI and advToggleUI.Set then advToggleUI:Set(false) end
+            if advToggleUI and advToggleUI.Set then
+                __suppressLightingToggle = true
+                advToggleUI:Set(false)
+                __suppressLightingToggle = false
+            end
         else
+            -- Only reset to default if both toggles are off
             if cfg.lighting.preset == "rtx" then
                 cfg.lighting.preset = "none"
-                if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
+                if (not advToggleUI or (advToggleUI.Get and advToggleUI:Get() == false)) then
+                    applyLighting("none")
+                end
             end
         end
         if Config then Config.save(cfg) end
@@ -450,14 +514,22 @@ advToggleUI = lightingTab:CreateToggle({
     CurrentValue = cfg.lighting and cfg.lighting.preset == "advanced",
     Flag = "AdvancedLightingToggle",
     Callback = function(state)
+        if __suppressLightingToggle then return end
         if state then
-            if LightingMod and LightingMod.applyAdvanced then LightingMod.applyAdvanced() end
+            applyLighting("advanced")
             cfg.lighting.preset = "advanced"
-            if rtxToggleUI and rtxToggleUI.Set then rtxToggleUI:Set(false) end
+            if rtxToggleUI and rtxToggleUI.Set then
+                __suppressLightingToggle = true
+                rtxToggleUI:Set(false)
+                __suppressLightingToggle = false
+            end
         else
+            -- Only reset to default if both toggles are off
             if cfg.lighting.preset == "advanced" then
                 cfg.lighting.preset = "none"
-                if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
+                if (not rtxToggleUI or (rtxToggleUI.Get and rtxToggleUI:Get() == false)) then
+                    applyLighting("none")
+                end
             end
         end
         if Config then Config.save(cfg) end
@@ -467,7 +539,7 @@ advToggleUI = lightingTab:CreateToggle({
 lightingTab:CreateButton({
     Name = "Reset to Default Graphics",
     Callback = function()
-        if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
+        applyLighting("none")
         cfg.lighting.preset = "none"
         if rtxToggleUI and rtxToggleUI.Set then rtxToggleUI:Set(false) end
         if advToggleUI and advToggleUI.Set then advToggleUI:Set(false) end
@@ -505,15 +577,155 @@ local disableShadowsToggle = lightingTab:CreateToggle({
 -- Apply saved lighting preset on load
 task.spawn(function()
     if LightingMod then
-        if cfg.lighting and cfg.lighting.preset == "rtx" and LightingMod.applyRTX then
-            LightingMod.applyRTX()
-        elseif cfg.lighting and cfg.lighting.preset == "advanced" and LightingMod.applyAdvanced then
-            LightingMod.applyAdvanced()
-        elseif cfg.lighting and cfg.lighting.preset == "none" and LightingMod.applyDefault then
-            LightingMod.applyDefault()
-        end
-        if cfg.lighting and cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
-            LightingMod.disableShadows(true)
+        if cfg.lighting then
+            applyLighting(cfg.lighting.preset or "none")
         end
     end
 end)
+
+-- Fallback inline lighting implementation if module not available
+if not LightingMod then
+    local Lighting = game:GetService("Lighting")
+    local function clearEffects()
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
+                or v:IsA("SunRaysEffect") or v:IsA("Sky") or v:IsA("Atmosphere")
+                or v:IsA("DepthOfFieldEffect") then
+                v:Destroy()
+            end
+        end
+    end
+    LightingMod = {
+        applyDefault = function()
+            clearEffects()
+            Lighting.Ambient = Color3.fromRGB(127, 127, 127)
+            Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+            Lighting.Brightness = 2
+            Lighting.GlobalShadows = true
+            Lighting.ShadowSoftness = 0.5
+            Lighting.EnvironmentDiffuseScale = 1
+            Lighting.EnvironmentSpecularScale = 1
+            Lighting.ColorShift_Bottom = Color3.new(0,0,0)
+            Lighting.ColorShift_Top = Color3.new(0,0,0)
+            Lighting.ClockTime = 14
+            Lighting.ExposureCompensation = 0
+        end,
+        disableShadows = function(disabled)
+            Lighting.GlobalShadows = not disabled
+            Lighting.ShadowSoftness = disabled and 0 or 0.4
+        end,
+        applyRTX = function()
+            clearEffects()
+            local Bloom = Instance.new("BloomEffect")
+            local Blur = Instance.new("BlurEffect")
+            local ColorCor = Instance.new("ColorCorrectionEffect")
+            local SunRays = Instance.new("SunRaysEffect")
+            local Sky = Instance.new("Sky")
+            local Atm = Instance.new("Atmosphere")
+            local DoF = Instance.new("DepthOfFieldEffect")
+
+            Bloom.Intensity = 0.4
+            Bloom.Size = 12
+            Bloom.Threshold = 0.85
+            Blur.Size = 2
+            ColorCor.Brightness = 0.15
+            ColorCor.Contrast = 0.5
+            ColorCor.Saturation = -0.05
+            ColorCor.TintColor = Color3.fromRGB(255, 245, 235)
+            SunRays.Intensity = 0.15
+            SunRays.Spread = 0.8
+            DoF.FarIntensity = 0.2
+            DoF.FocusDistance = 35
+            DoF.InFocusRadius = 25
+            DoF.NearIntensity = 0.15
+            Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"
+            Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
+            Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"
+            Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
+            Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"
+            Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
+            Sky.SunAngularSize = 12
+
+            Bloom.Parent = Lighting
+            Blur.Parent = Lighting
+            ColorCor.Parent = Lighting
+            SunRays.Parent = Lighting
+            Sky.Parent = Lighting
+            Atm.Parent = Lighting
+            DoF.Parent = Lighting
+
+            Lighting.Ambient = Color3.fromRGB(20, 20, 25)
+            Lighting.Brightness = 3
+            Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+            Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+            Lighting.EnvironmentDiffuseScale = 0.25
+            Lighting.EnvironmentSpecularScale = 0.3
+            Lighting.GlobalShadows = true
+            Lighting.OutdoorAmbient = Color3.fromRGB(20, 20, 25)
+            Lighting.ShadowSoftness = 0.25
+            Lighting.ClockTime = 7.25
+            Lighting.GeographicLatitude = 25
+            Lighting.ExposureCompensation = 0.35
+
+            Atm.Density = 0.05
+            Atm.Offset = 0.5
+            Atm.Color = Color3.fromRGB(200, 210, 235)
+            Atm.Decay = Color3.fromRGB(120, 140, 160)
+            Atm.Glare = 0
+            Atm.Haze = 2
+        end,
+        applyAdvanced = function()
+            clearEffects()
+            local Sky = Instance.new("Sky")
+            local Bloom = Instance.new("BloomEffect")
+            local ColorC = Instance.new("ColorCorrectionEffect")
+            local SunRays = Instance.new("SunRaysEffect")
+            Sky.MoonAngularSize = 11
+            Sky.MoonTextureId = "rbxasset://sky/moon.jpg"
+            Sky.SkyboxBk = "rbxassetid://17843929750"
+            Sky.SkyboxDn = "rbxassetid://17843931996"
+            Sky.SkyboxFt = "rbxassetid://17843931265"
+            Sky.SkyboxLf = "rbxassetid://17843929139"
+            Sky.SkyboxRt = "rbxassetid://17843930617"
+            Sky.SkyboxUp = "rbxassetid://17843932671"
+            Sky.StarCount = 3000
+            Sky.SunAngularSize = 21
+            Sky.SunTextureId = "rbxasset://sky/sun.jpg"
+            Bloom.Enabled = true
+            Bloom.Intensity = 0.65
+            Bloom.Size = 8
+            Bloom.Threshold = 0.9
+            ColorC.Brightness = 0
+            ColorC.Contrast = 0.08
+            ColorC.Enabled = true
+            ColorC.Saturation = 0.2
+            ColorC.TintColor = Color3.new(1, 1, 1)
+            SunRays.Intensity = 0.25
+            SunRays.Spread = 1
+            SunRays.Enabled = true
+            Sky.Parent = Lighting
+            Bloom.Parent = Lighting
+            ColorC.Parent = Lighting
+            SunRays.Parent = Lighting
+            Lighting.Brightness = 1.6
+            Lighting.Ambient = Color3.new(0.25, 0.25, 0.25)
+            Lighting.ShadowSoftness = 0.4
+            Lighting.ClockTime = 13.4
+            Lighting.OutdoorAmbient = Color3.new(0.25, 0.25, 0.25)
+            Lighting.GlobalShadows = true
+        end
+    }
+    -- Apply config using fallback LightingMod
+    if cfg and cfg.lighting then
+        if cfg.lighting.preset == "rtx" and LightingMod.applyRTX then
+            LightingMod.applyRTX()
+        elseif cfg.lighting.preset == "advanced" and LightingMod.applyAdvanced then
+            LightingMod.applyAdvanced()
+        elseif cfg.lighting.preset == "none" and LightingMod.applyDefault then
+            LightingMod.applyDefault()
+        end
+        if cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
+            LightingMod.disableShadows(true)
+        end
+    end
+end
