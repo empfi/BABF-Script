@@ -520,7 +520,7 @@ lightingTab:CreateButton({
         if Window.CreatePrompt then -- Check if prompt exists
             Window:CreatePrompt({
                 Title = "Apply Advanced Lighting?", 
-                Content = "This will change your lighting settings and may affect performance.",
+                Content = "This will change your lighting settings and may affect performance, based on the choosen option!",
                 Actions = {
                     Accept = {
                         Name = "Apply",
