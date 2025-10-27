@@ -51,7 +51,6 @@ Rayfield:Notify({
 
 local Window = Rayfield:CreateWindow({
     Name = "empfi | Build a Brainrot Factory",
-    Icon = 0,  -- Add back icon
     LoadingTitle = "empfi loading...",
     LoadingSubtitle = "by empfi",
     ShowText = "empfi",  -- Add back ShowText
@@ -86,16 +85,16 @@ if not c then
     c.Parent = f
 end
 
--- Replace string icon names (which can error) with numeric 0 so tabs load reliably
-local MainTab = Window:CreateTab("Main", 0)
+-- Tabs
+local MainTab = Window:CreateTab("Main")
 local Divider = MainTab:CreateDivider()
-local experienceTab = Window:CreateTab("Experience", 0)
+local experienceTab = Window:CreateTab("Experience")
 local Divider = experienceTab:CreateDivider()
-local aboutTab = Window:CreateTab("About", 0)
+local aboutTab = Window:CreateTab("About")
 local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
-local devTab = Window:CreateTab("Dev", 0)
+local devTab = Window:CreateTab("Dev")
 local Divider = devTab:CreateDivider()
 
 -- Update Button
@@ -288,7 +287,7 @@ local Toggle = MainTab:CreateToggle({
                 while getgenv().autoCollect do
                     nearbyCollect()
 
-                    task.wait(0.1)
+                    task.wait(0.02)
                 end
             end)
         else
@@ -369,29 +368,48 @@ local buyToggle = MainTab:CreateToggle({
 })
 
 -- Sound Control Toggle
+-- Robust sound mute that persists and handles new sounds
+local __empfi_sound_conns = {}
+local function setGlobalMute(state)
+    local SoundService = game:GetService("SoundService")
+    if state then
+        SoundService.Volume = 0
+        -- Mute all existing sounds
+        for _, s in ipairs(game:GetDescendants()) do
+            if s:IsA("Sound") then
+                pcall(function() s.Volume = 0 end)
+            end
+        end
+        -- Track new sounds and mute them
+        if not __empfi_sound_conns.desc then
+            __empfi_sound_conns.desc = game.DescendantAdded:Connect(function(obj)
+                if obj:IsA("Sound") then
+                    pcall(function() obj.Volume = 0 end)
+                end
+            end)
+        end
+    else
+        SoundService.Volume = 1
+        if __empfi_sound_conns.desc then
+            __empfi_sound_conns.desc:Disconnect()
+            __empfi_sound_conns.desc = nil
+        end
+        -- Do not attempt to restore per-sound original volume values; rely on global volume
+    end
+end
+
 local soundToggle = experienceTab:CreateToggle({
     Name = "Disable Game Sounds",
     CurrentValue = false,
     Flag = "DisableSoundsToggle",
     Callback = function(state)
-        local soundService = game:GetService("SoundService")
-        if state then
-            soundService.Volume = 0
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Game sounds disabled",
-                Duration = 3,
-                Image = "loader",
-            })
-        else
-            soundService.Volume = 1
-            Rayfield:Notify({
-                Title = "empfi | Build a Brainrot Factory",
-                Content = "Game sounds enabled",
-                Duration = 3,
-                Image = "loader",
-            })
-        end
+        setGlobalMute(state)
+        Rayfield:Notify({
+            Title = "empfi | Build a Brainrot Factory",
+            Content = state and "Game sounds disabled" or "Game sounds enabled",
+            Duration = 3,
+            Image = "loader",
+        })
     end,
 })
 
@@ -402,99 +420,64 @@ local Paragraph = aboutTab:CreateParagraph({
 })
 
 -- Add Lighting tab and buttons
-local lightingTab = Window:CreateTab("Lighting", 0)
+local lightingTab = Window:CreateTab("Lighting")
 local Divider = lightingTab:CreateDivider()
 
--- RTX Lighting Button
-lightingTab:CreateButton({
+-- Graphics section
+lightingTab:CreateLabel("Graphics Presets")
+local rtxToggleUI, advToggleUI
+rtxToggleUI = lightingTab:CreateToggle({
     Name = "RTX Lighting",
-    Callback = function()
-        -- Confirm before applying
-        if Window.CreatePrompt then -- Check if prompt exists
-            Window:CreatePrompt({
-                Title = "Apply RTX Lighting?",
-                Content = "This will change your lighting settings and may affect performance.",
-                Actions = {
-                    Accept = {
-                        Name = "Apply",
-                        Callback = function()
-                            if LightingMod and LightingMod.applyRTX then
-                                LightingMod.applyRTX()
-                            end
-                            cfg.lighting.preset = "rtx"
-                            if Config then Config.save(cfg) end
-                            Rayfield:Notify({
-                                Title = "Success",
-                                Content = "RTX Lighting applied",
-                                Duration = 3,
-                            })
-                        end
-                    },
-                    Cancel = {
-                        Name = "Cancel"
-                    }
-                }
-            })
-        else
-            if LightingMod and LightingMod.applyRTX then
-                LightingMod.applyRTX()
-            end
+    CurrentValue = cfg.lighting and cfg.lighting.preset == "rtx",
+    Flag = "RTXLightingToggle",
+    Callback = function(state)
+        if state then
+            if LightingMod and LightingMod.applyRTX then LightingMod.applyRTX() end
             cfg.lighting.preset = "rtx"
-            if Config then Config.save(cfg) end
-            Rayfield:Notify({
-                Title = "Success",
-                Content = "RTX Lighting applied",
-                Duration = 3,
-            })
-        end
-    end
-})
-
--- Advanced Lighting Button  
-lightingTab:CreateButton({
-    Name = "Advanced Lighting",
-    Callback = function()
-        -- Confirm before applying
-        if Window.CreatePrompt then -- Check if prompt exists
-            Window:CreatePrompt({
-                Title = "Apply Advanced Lighting?", 
-                Content = "This will change your lighting settings and may affect performance.",
-                Actions = {
-                    Accept = {
-                        Name = "Apply",
-                        Callback = function()
-                            if LightingMod and LightingMod.applyAdvanced then
-                                LightingMod.applyAdvanced()
-                            end
-                            cfg.lighting.preset = "advanced"
-                            if Config then Config.save(cfg) end
-                            Rayfield:Notify({
-                                Title = "Success",
-                                Content = "Advanced Lighting applied",
-                                Duration = 3,
-                            })
-                        end
-                    },
-                    Cancel = {
-                        Name = "Cancel"
-                    }
-                }
-            })
+            if advToggleUI and advToggleUI.Set then advToggleUI:Set(false) end
         else
-            if LightingMod and LightingMod.applyAdvanced then
-                LightingMod.applyAdvanced()
+            if cfg.lighting.preset == "rtx" then
+                cfg.lighting.preset = "none"
+                if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
             end
-            cfg.lighting.preset = "advanced"
-            if Config then Config.save(cfg) end
-            Rayfield:Notify({
-                Title = "Success",
-                Content = "Advanced Lighting applied",
-                Duration = 3,
-            })
         end
+        if Config then Config.save(cfg) end
     end
 })
 
+advToggleUI = lightingTab:CreateToggle({
+    Name = "Advanced Lighting",
+    CurrentValue = cfg.lighting and cfg.lighting.preset == "advanced",
+    Flag = "AdvancedLightingToggle",
+    Callback = function(state)
+        if state then
+            if LightingMod and LightingMod.applyAdvanced then LightingMod.applyAdvanced() end
+            cfg.lighting.preset = "advanced"
+            if rtxToggleUI and rtxToggleUI.Set then rtxToggleUI:Set(false) end
+        else
+            if cfg.lighting.preset == "advanced" then
+                cfg.lighting.preset = "none"
+                if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
+            end
+        end
+        if Config then Config.save(cfg) end
+    end
+})
+
+lightingTab:CreateButton({
+    Name = "Reset to Default Graphics",
+    Callback = function()
+        if LightingMod and LightingMod.applyDefault then LightingMod.applyDefault() end
+        cfg.lighting.preset = "none"
+        if rtxToggleUI and rtxToggleUI.Set then rtxToggleUI:Set(false) end
+        if advToggleUI and advToggleUI.Set then advToggleUI:Set(false) end
+        if Config then Config.save(cfg) end
+        Rayfield:Notify({ Title = "Graphics", Content = "Reset to default", Duration = 3 })
+    end
+})
+
+-- Advanced Graphics section
+lightingTab:CreateLabel("Advanced Graphics")
 -- Lighting: Disable Shadows toggle
 local disableShadowsToggle = lightingTab:CreateToggle({
     Name = "Disable Shadows",
@@ -526,6 +509,8 @@ task.spawn(function()
             LightingMod.applyRTX()
         elseif cfg.lighting and cfg.lighting.preset == "advanced" and LightingMod.applyAdvanced then
             LightingMod.applyAdvanced()
+        elseif cfg.lighting and cfg.lighting.preset == "none" and LightingMod.applyDefault then
+            LightingMod.applyDefault()
         end
         if cfg.lighting and cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
             LightingMod.disableShadows(true)

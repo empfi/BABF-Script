@@ -12,6 +12,22 @@ local function clearEffects()
     end
 end
 
+function LightingMod.applyDefault()
+    clearEffects()
+    -- Reasonable Roblox-like defaults
+    LightingService.Ambient = Color3.fromRGB(127, 127, 127)
+    LightingService.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+    LightingService.Brightness = 2
+    LightingService.GlobalShadows = true
+    LightingService.ShadowSoftness = 0.5
+    LightingService.EnvironmentDiffuseScale = 1
+    LightingService.EnvironmentSpecularScale = 1
+    LightingService.ColorShift_Bottom = Color3.new(0, 0, 0)
+    LightingService.ColorShift_Top = Color3.new(0, 0, 0)
+    LightingService.ClockTime = 14
+    LightingService.ExposureCompensation = 0
+end
+
 function LightingMod.disableShadows(disabled)
     LightingService.GlobalShadows = not disabled
     LightingService.ShadowSoftness = disabled and 0 or 0.4
