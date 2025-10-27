@@ -19,6 +19,93 @@ local function loadLocalModule(path)
 end
 
 local LightingMod = loadLocalModule("lighting.lua")
+
+-- Fallback if lighting module fails to load
+if not LightingMod then
+    LightingMod = {}
+    local Lighting = game:GetService("Lighting")
+    
+    local function clearEffects()
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
+                or v:IsA("SunRaysEffect") or v:IsA("Sky") or v:IsA("Atmosphere")
+                or v:IsA("DepthOfFieldEffect") then
+                v:Destroy()
+            end
+        end
+    end
+    
+    function LightingMod.applyDefault()
+        clearEffects()
+        Lighting.Ambient = Color3.fromRGB(127, 127, 127)
+        Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+        Lighting.Brightness = 2
+        Lighting.GlobalShadows = true
+        Lighting.ShadowSoftness = 0.5
+        Lighting.ClockTime = 14
+    end
+    
+    function LightingMod.applyRTX()
+        clearEffects()
+        local Bloom = Instance.new("BloomEffect", Lighting)
+        local ColorCor = Instance.new("ColorCorrectionEffect", Lighting)
+        local SunRays = Instance.new("SunRaysEffect", Lighting)
+        local Atm = Instance.new("Atmosphere", Lighting)
+        
+        Bloom.Intensity = 0.4
+        Bloom.Size = 12
+        Bloom.Threshold = 0.85
+        ColorCor.Brightness = 0.15
+        ColorCor.Contrast = 0.5
+        ColorCor.Saturation = -0.05
+        SunRays.Intensity = 0.15
+        SunRays.Spread = 0.8
+        
+        Lighting.Ambient = Color3.fromRGB(20, 20, 25)
+        Lighting.Brightness = 3
+        Lighting.GlobalShadows = true
+        Lighting.OutdoorAmbient = Color3.fromRGB(20, 20, 25)
+        Lighting.ShadowSoftness = 0.25
+        Lighting.ClockTime = 7.25
+        Lighting.ExposureCompensation = 0.35
+        
+        Atm.Density = 0.05
+        Atm.Offset = 0.5
+        Atm.Color = Color3.fromRGB(200, 210, 235)
+        Atm.Decay = Color3.fromRGB(120, 140, 160)
+        Atm.Glare = 0
+        Atm.Haze = 2
+    end
+    
+    function LightingMod.applyAdvanced()
+        clearEffects()
+        local Bloom = Instance.new("BloomEffect", Lighting)
+        local ColorC = Instance.new("ColorCorrectionEffect", Lighting)
+        local SunRays = Instance.new("SunRaysEffect", Lighting)
+        
+        Bloom.Intensity = 0.65
+        Bloom.Size = 8
+        Bloom.Threshold = 0.9
+        ColorC.Brightness = 0
+        ColorC.Contrast = 0.08
+        ColorC.Saturation = 0.2
+        SunRays.Intensity = 0.25
+        SunRays.Spread = 1
+        
+        Lighting.Brightness = 1.6
+        Lighting.Ambient = Color3.new(0.25, 0.25, 0.25)
+        Lighting.ShadowSoftness = 0.4
+        Lighting.ClockTime = 13.4
+        Lighting.OutdoorAmbient = Color3.new(0.25, 0.25, 0.25)
+        Lighting.GlobalShadows = true
+    end
+    
+    function LightingMod.disableShadows(disabled)
+        Lighting.GlobalShadows = not disabled
+        Lighting.ShadowSoftness = disabled and 0 or 0.4
+    end
+end
+
 local Config = loadLocalModule("config.lua")
 local cfg = Config and Config.load() or {
     autoCollect = false,
@@ -28,19 +115,6 @@ local cfg = Config and Config.load() or {
     selectedItems = {"Basic Conveyor"},
     lighting = { preset = "none", shadowsDisabled = false },
 }
-
-if not LightingMod then
-    local ok, src = pcall(function()
-        return game:HttpGet("https://raw.githubusercontent.com/empfi/BABF-Script/main/lighting.lua")
-    end)
-    if ok and type(src) == "string" and #src > 0 then
-        local fn = loadstring(src)
-        if fn then
-            local s, mod = pcall(fn)
-            if s then LightingMod = mod end
-        end
-    end
-end
 
 -- Wait for LocalPlayer if script runs before player is available
 local p = plrs.LocalPlayer
@@ -101,15 +175,15 @@ if not c then
 end
 
 -- Tabs
-local MainTab = Window:CreateTab("Main", 4483362458)
+local MainTab = Window:CreateTab("Main")
 local Divider = MainTab:CreateDivider()
-local experienceTab = Window:CreateTab("Experience", 4483362458)
+local experienceTab = Window:CreateTab("Experience")
 local Divider = experienceTab:CreateDivider()
-local aboutTab = Window:CreateTab("About", 4483362458)
+local aboutTab = Window:CreateTab("About")
 local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
-local devTab = Window:CreateTab("Dev", 4483362458)
+local devTab = Window:CreateTab("Dev")
 local Divider = devTab:CreateDivider()
 
 -- Update Button
@@ -212,30 +286,146 @@ function nearbyCollect()
     end
 end
 
--- Anti Lag
-local __antiLagConn
+-- Anti Lag - Continuous monitoring system
+local antiLagConnections = {}
+local processedItems = {}
+
+local function optimizeInstance(inst)
+    if not inst then return end
+    
+    -- Hide visual elements
+    if inst:IsA("BasePart") then
+        inst.Transparency = 1
+        inst.CanCollide = false
+        inst.CastShadow = false
+    elseif inst:IsA("Decal") or inst:IsA("Texture") then
+        inst.Transparency = 1
+    elseif inst:IsA("SurfaceGui") or inst:IsA("BillboardGui") then
+        inst.Enabled = false
+    elseif inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam") then
+        inst.Enabled = false
+    elseif inst:IsA("Light") then
+        inst.Enabled = false
+    elseif inst:IsA("Fire") or inst:IsA("Smoke") or inst:IsA("Sparkles") then
+        inst.Enabled = false
+    end
+end
+
+local function processItem(item)
+    if processedItems[item] then return end
+    processedItems[item] = true
+    
+    -- Optimize the item and all its descendants
+    pcall(optimizeInstance, item)
+    for _, desc in ipairs(item:GetDescendants()) do
+        pcall(optimizeInstance, desc)
+    end
+    
+    -- Monitor for new descendants
+    local conn = item.DescendantAdded:Connect(function(desc)
+        if getgenv().antiLagEnabled then
+            pcall(optimizeInstance, desc)
+        end
+    end)
+    table.insert(antiLagConnections, conn)
+end
+
+local function restoreInstance(inst)
+    if not inst then return end
+    
+    if inst:IsA("BasePart") then
+        inst.Transparency = inst:GetAttribute("empfi_prevTrans") or 0
+        inst.CanCollide = inst:GetAttribute("empfi_prevCollide") or true
+        inst.CastShadow = true
+    elseif inst:IsA("Decal") or inst:IsA("Texture") then
+        inst.Transparency = inst:GetAttribute("empfi_prevTrans") or 0
+    elseif inst:IsA("SurfaceGui") or inst:IsA("BillboardGui") then
+        inst.Enabled = true
+    elseif inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam") then
+        inst.Enabled = true
+    elseif inst:IsA("Light") then
+        inst.Enabled = true
+    elseif inst:IsA("Fire") or inst:IsA("Smoke") or inst:IsA("Sparkles") then
+        inst.Enabled = true
+    end
+end
+
 function antiLag()
-    if __antiLagConn then __antiLagConn:Disconnect(); __antiLagConn = nil end
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local function move()
-        local itemFolder = f and (f:FindFirstChild("Items") or f:WaitForChild("Items", 1))
-        if itemFolder and itemFolder.Parent ~= replicatedStorage then
-            itemFolder.Parent = replicatedStorage
+    local itemFolder = f:FindFirstChild("Items")
+    if not itemFolder then return end
+    
+    -- Apply rendering optimizations
+    local Lighting = game:GetService("Lighting")
+    if Lighting then
+        -- Store original values
+        if not getgenv().empfi_originalRenderSettings then
+            getgenv().empfi_originalRenderSettings = {
+                GlobalShadows = Lighting.GlobalShadows,
+                Technology = Lighting.Technology
+            }
+        end
+        -- Optimize for performance
+        Lighting.GlobalShadows = false
+        if Lighting.Technology ~= Enum.Technology.Compatibility then
+            Lighting.Technology = Enum.Technology.Compatibility
         end
     end
-    move()
-    if f and not __antiLagConn then
-        __antiLagConn = f.DescendantAdded:Connect(function(obj)
-            if obj.Name == "Items" and obj:IsA("Folder") then
-                obj.Parent = replicatedStorage
-            end
-        end)
+    
+    -- Reduce render distance for items
+    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    
+    -- Process all existing items
+    for _, item in ipairs(itemFolder:GetChildren()) do
+        pcall(processItem, item)
     end
+    
+    -- Monitor for new items
+    local conn = itemFolder.ChildAdded:Connect(function(item)
+        if getgenv().antiLagEnabled then
+            task.wait(0.05) -- Small delay to let item fully load
+            pcall(processItem, item)
+        end
+    end)
+    table.insert(antiLagConnections, conn)
+end
+
+function stopAntiLag()
+    -- Disconnect all connections
+    for _, conn in ipairs(antiLagConnections) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    antiLagConnections = {}
+    
+    -- Restore render settings
+    if getgenv().empfi_originalRenderSettings then
+        local Lighting = game:GetService("Lighting")
+        if Lighting then
+            Lighting.GlobalShadows = getgenv().empfi_originalRenderSettings.GlobalShadows
+            Lighting.Technology = getgenv().empfi_originalRenderSettings.Technology
+        end
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        getgenv().empfi_originalRenderSettings = nil
+    end
+    
+    -- Restore all items
+    local itemFolder = f:FindFirstChild("Items")
+    if itemFolder then
+        for _, item in ipairs(itemFolder:GetChildren()) do
+            pcall(restoreInstance, item)
+            for _, desc in ipairs(item:GetDescendants()) do
+                pcall(restoreInstance, desc)
+            end
+        end
+    end
+    
+    processedItems = {}
 end
 
 -- Purchase
 local shopItems = {
-    "Basic_Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
+    "Basic Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
     "Stair Conveyor", "Better Machine",
     "Slide Conveyor", "Split Conveyor", "Doubler Collector", "Super Conveyor", "Super Upgrader",
     "Super Collector", "Super Machine", "Heavenly Upgrader", "Heavenly Machine",
@@ -359,20 +549,14 @@ local lagToggle = MainTab:CreateToggle({
             antiLag()
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Enabled",
+                Content = "Anti Lag Enabled - Items will be hidden",
                 Duration = 5,
             })
         else
-            -- Restore items folder back to the factory
-            local replicatedStorage = game:GetService("ReplicatedStorage")
-            local itemFolder = replicatedStorage:FindFirstChild("Items")
-            if itemFolder then
-                itemFolder.Parent = f
-            end
-            if __antiLagConn then __antiLagConn:Disconnect(); __antiLagConn = nil end
+            stopAntiLag()
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Disabled",
+                Content = "Anti Lag Disabled - Items restored",
                 Duration = 5,
             })
         end
@@ -476,7 +660,7 @@ local Paragraph = aboutTab:CreateParagraph({
 })
 
 -- Add Lighting tab and buttons
-local lightingTab = Window:CreateTab("Lighting", 4483362458)
+local lightingTab = Window:CreateTab("Lighting")
 local Divider = lightingTab:CreateDivider()
 
 -- Graphics section
@@ -484,12 +668,11 @@ lightingTab:CreateLabel("Graphics Presets")
 local rtxToggleUI, advToggleUI
 local __suppressLightingToggle = false
 local function applyLighting(preset)
-    if not LightingMod then return end
-    if preset == "rtx" and LightingMod.applyRTX then
+    if preset == "rtx" then
         LightingMod.applyRTX()
-    elseif preset == "advanced" and LightingMod.applyAdvanced then
+    elseif preset == "advanced" then
         LightingMod.applyAdvanced()
-    elseif LightingMod.applyDefault then
+    else
         LightingMod.applyDefault()
     end
     -- short watchdog: some games override lighting immediately; reapply once if stripped
@@ -502,13 +685,13 @@ local function applyLighting(preset)
             end
         end
         if preset ~= "none" and not hasEffects then
-            if preset == "rtx" and LightingMod.applyRTX then
+            if preset == "rtx" then
                 LightingMod.applyRTX()
-            elseif preset == "advanced" and LightingMod.applyAdvanced then
+            elseif preset == "advanced" then
                 LightingMod.applyAdvanced()
             end
         end
-        if cfg.lighting and cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
+        if cfg.lighting and cfg.lighting.shadowsDisabled then
             LightingMod.disableShadows(true)
         end
     end)
@@ -584,13 +767,7 @@ local disableShadowsToggle = lightingTab:CreateToggle({
     CurrentValue = cfg.lighting and cfg.lighting.shadowsDisabled or false,
     Flag = "DisableShadowsToggle",
     Callback = function(state)
-        if LightingMod and LightingMod.disableShadows then
-            LightingMod.disableShadows(state)
-        else
-            local Lighting = game:GetService("Lighting")
-            Lighting.GlobalShadows = not state
-            Lighting.ShadowSoftness = state and 0 or 0.4
-        end
+        LightingMod.disableShadows(state)
         cfg.lighting = cfg.lighting or {}
         cfg.lighting.shadowsDisabled = state
         if Config then Config.save(cfg) end
@@ -603,7 +780,7 @@ local disableShadowsToggle = lightingTab:CreateToggle({
 })
 
 -- Farm tab
-local farmTab = Window:CreateTab("Farm", 4483362458)
+local farmTab = Window:CreateTab("Farm")
 local antiAfkToggle = farmTab:CreateToggle({
     Name = "Anti-AFK",
     CurrentValue = cfg.antiAfkEnabled == true,
@@ -620,10 +797,22 @@ local antiAfkToggle = farmTab:CreateToggle({
     end,
 })
 
--- Apply saved lighting preset on load (requires lighting.lua present)
+-- Apply saved lighting preset on load
 task.spawn(function()
-    if LightingMod and cfg.lighting then
-        applyLighting(cfg.lighting.preset or "none")
+    task.wait(0.5) -- Wait for game to fully load
+    if cfg.lighting and cfg.lighting.preset and cfg.lighting.preset ~= "none" then
+        applyLighting(cfg.lighting.preset)
+        -- Reapply after a delay to ensure it sticks
+        task.wait(1)
+        applyLighting(cfg.lighting.preset)
+    end
+end)
+
+-- Auto-start anti-lag if it was enabled
+task.spawn(function()
+    task.wait(1) -- Wait for factory to fully load
+    if getgenv().antiLagEnabled then
+        antiLag()
     end
 end)
 
