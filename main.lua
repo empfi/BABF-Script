@@ -290,99 +290,29 @@ end
 local antiLagConnections = {}
 local processedItems = {}
 
-local function optimizeInstance(inst)
-    if not inst then return end
-    
-    -- Hide visual elements
-    if inst:IsA("BasePart") then
-        inst.Transparency = 1
-        inst.CanCollide = false
-        inst.CastShadow = false
-    elseif inst:IsA("Decal") or inst:IsA("Texture") then
-        inst.Transparency = 1
-    elseif inst:IsA("SurfaceGui") or inst:IsA("BillboardGui") then
-        inst.Enabled = false
-    elseif inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam") then
-        inst.Enabled = false
-    elseif inst:IsA("Light") then
-        inst.Enabled = false
-    elseif inst:IsA("Fire") or inst:IsA("Smoke") or inst:IsA("Sparkles") then
-        inst.Enabled = false
-    end
-end
-
 local function processItem(item)
     if processedItems[item] then return end
     processedItems[item] = true
     
-    -- Optimize the item and all its descendants
-    pcall(optimizeInstance, item)
-    for _, desc in ipairs(item:GetDescendants()) do
-        pcall(optimizeInstance, desc)
-    end
-    
-    -- Monitor for new descendants
-    local conn = item.DescendantAdded:Connect(function(desc)
-        if getgenv().antiLagEnabled then
-            pcall(optimizeInstance, desc)
-        end
+    -- Completely remove item from cache by destroying it
+    pcall(function()
+        item:Destroy()
     end)
-    table.insert(antiLagConnections, conn)
 end
 
-local function restoreInstance(inst)
-    if not inst then return end
-    
-    if inst:IsA("BasePart") then
-        inst.Transparency = inst:GetAttribute("empfi_prevTrans") or 0
-        inst.CanCollide = inst:GetAttribute("empfi_prevCollide") or true
-        inst.CastShadow = true
-    elseif inst:IsA("Decal") or inst:IsA("Texture") then
-        inst.Transparency = inst:GetAttribute("empfi_prevTrans") or 0
-    elseif inst:IsA("SurfaceGui") or inst:IsA("BillboardGui") then
-        inst.Enabled = true
-    elseif inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam") then
-        inst.Enabled = true
-    elseif inst:IsA("Light") then
-        inst.Enabled = true
-    elseif inst:IsA("Fire") or inst:IsA("Smoke") or inst:IsA("Sparkles") then
-        inst.Enabled = true
-    end
-end
 
 function antiLag()
     local itemFolder = f:FindFirstChild("Items")
     if not itemFolder then return end
     
-    -- Apply rendering optimizations
-    local Lighting = game:GetService("Lighting")
-    if Lighting then
-        -- Store original values
-        if not getgenv().empfi_originalRenderSettings then
-            getgenv().empfi_originalRenderSettings = {
-                GlobalShadows = Lighting.GlobalShadows,
-                Technology = Lighting.Technology
-            }
-        end
-        -- Optimize for performance
-        Lighting.GlobalShadows = false
-        if Lighting.Technology ~= Enum.Technology.Compatibility then
-            Lighting.Technology = Enum.Technology.Compatibility
-        end
-    end
-    
-    -- Reduce render distance for items
-    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    
-    -- Process all existing items
+    -- Destroy all existing items to remove from cache
     for _, item in ipairs(itemFolder:GetChildren()) do
         pcall(processItem, item)
     end
     
-    -- Monitor for new items
+    -- Monitor for new items and destroy them immediately
     local conn = itemFolder.ChildAdded:Connect(function(item)
         if getgenv().antiLagEnabled then
-            task.wait(0.05) -- Small delay to let item fully load
             pcall(processItem, item)
         end
     end)
@@ -397,30 +327,9 @@ function stopAntiLag()
         end
     end
     antiLagConnections = {}
-    
-    -- Restore render settings
-    if getgenv().empfi_originalRenderSettings then
-        local Lighting = game:GetService("Lighting")
-        if Lighting then
-            Lighting.GlobalShadows = getgenv().empfi_originalRenderSettings.GlobalShadows
-            Lighting.Technology = getgenv().empfi_originalRenderSettings.Technology
-        end
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-        getgenv().empfi_originalRenderSettings = nil
-    end
-    
-    -- Restore all items
-    local itemFolder = f:FindFirstChild("Items")
-    if itemFolder then
-        for _, item in ipairs(itemFolder:GetChildren()) do
-            pcall(restoreInstance, item)
-            for _, desc in ipairs(item:GetDescendants()) do
-                pcall(restoreInstance, desc)
-            end
-        end
-    end
-    
     processedItems = {}
+    
+    -- Note: Destroyed items cannot be restored, but new items will spawn normally
 end
 
 -- Purchase
@@ -549,14 +458,14 @@ local lagToggle = MainTab:CreateToggle({
             antiLag()
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Enabled - Items will be hidden",
+                Content = "Anti Lag Enabled - Items will be destroyed",
                 Duration = 5,
             })
         else
             stopAntiLag()
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
-                Content = "Anti Lag Disabled - Items restored",
+                Content = "Anti Lag Disabled - New items will spawn normally",
                 Duration = 5,
             })
         end
