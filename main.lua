@@ -29,6 +29,19 @@ local cfg = Config and Config.load() or {
     lighting = { preset = "none", shadowsDisabled = false },
 }
 
+if not LightingMod then
+    local ok, src = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/empfi/BABF-Script/main/lighting.lua")
+    end)
+    if ok and type(src) == "string" and #src > 0 then
+        local fn = loadstring(src)
+        if fn then
+            local s, mod = pcall(fn)
+            if s then LightingMod = mod end
+        end
+    end
+end
+
 -- Wait for LocalPlayer if script runs before player is available
 local p = plrs.LocalPlayer
 if not p then
@@ -88,15 +101,15 @@ if not c then
 end
 
 -- Tabs
-local MainTab = Window:CreateTab("Main")
+local MainTab = Window:CreateTab("Main", 4483362458)
 local Divider = MainTab:CreateDivider()
-local experienceTab = Window:CreateTab("Experience")
+local experienceTab = Window:CreateTab("Experience", 4483362458)
 local Divider = experienceTab:CreateDivider()
-local aboutTab = Window:CreateTab("About")
+local aboutTab = Window:CreateTab("About", 4483362458)
 local Divider = aboutTab:CreateDivider()
 
 -- Dev Tab (holds developer tools like the updater)
-local devTab = Window:CreateTab("Dev")
+local devTab = Window:CreateTab("Dev", 4483362458)
 local Divider = devTab:CreateDivider()
 
 -- Update Button
@@ -105,7 +118,6 @@ local updateButton = devTab:CreateButton({
     Callback = function()
         local HttpService = game:GetService("HttpService")
         local sources = {
-            { name = "jsDelivr CDN", url = "https://cdn.jsdelivr.net/gh/empfi/BABF-Script@main/main.lua" },
             { name = "GitHub RAW", url = "https://raw.githubusercontent.com/empfi/BABF-Script/main/main.lua" },
         }
 
@@ -201,17 +213,29 @@ function nearbyCollect()
 end
 
 -- Anti Lag
+local __antiLagConn
 function antiLag()
+    if __antiLagConn then __antiLagConn:Disconnect(); __antiLagConn = nil end
     local replicatedStorage = game:GetService("ReplicatedStorage")
-    local itemFolder = f:WaitForChild("Items")
-    if itemFolder then
-        itemFolder.Parent = replicatedStorage
+    local function move()
+        local itemFolder = f and (f:FindFirstChild("Items") or f:WaitForChild("Items", 1))
+        if itemFolder and itemFolder.Parent ~= replicatedStorage then
+            itemFolder.Parent = replicatedStorage
+        end
+    end
+    move()
+    if f and not __antiLagConn then
+        __antiLagConn = f.DescendantAdded:Connect(function(obj)
+            if obj.Name == "Items" and obj:IsA("Folder") then
+                obj.Parent = replicatedStorage
+            end
+        end)
     end
 end
 
 -- Purchase
 local shopItems = {
-    "Basic Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
+    "Basic_Conveyor", "Basic Upgrader", "Basic Machine", "Speedy Conveyor", "Basic Collector", "Better Upgrader",
     "Stair Conveyor", "Better Machine",
     "Slide Conveyor", "Split Conveyor", "Doubler Collector", "Super Conveyor", "Super Upgrader",
     "Super Collector", "Super Machine", "Heavenly Upgrader", "Heavenly Machine",
@@ -345,6 +369,7 @@ local lagToggle = MainTab:CreateToggle({
             if itemFolder then
                 itemFolder.Parent = f
             end
+            if __antiLagConn then __antiLagConn:Disconnect(); __antiLagConn = nil end
             Rayfield:Notify({
                 Title = "empfi | Build a Brainrot Factory",
                 Content = "Anti Lag Disabled",
@@ -451,7 +476,7 @@ local Paragraph = aboutTab:CreateParagraph({
 })
 
 -- Add Lighting tab and buttons
-local lightingTab = Window:CreateTab("Lighting")
+local lightingTab = Window:CreateTab("Lighting", 4483362458)
 local Divider = lightingTab:CreateDivider()
 
 -- Graphics section
@@ -578,7 +603,7 @@ local disableShadowsToggle = lightingTab:CreateToggle({
 })
 
 -- Farm tab
-local farmTab = Window:CreateTab("Farm")
+local farmTab = Window:CreateTab("Farm", 4483362458)
 local antiAfkToggle = farmTab:CreateToggle({
     Name = "Anti-AFK",
     CurrentValue = cfg.antiAfkEnabled == true,
