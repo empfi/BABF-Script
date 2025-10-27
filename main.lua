@@ -15,24 +15,6 @@ local function loadLocalModule(path)
             if success then return mod end
         end
     end
-    -- HTTP fallback from GitHub
-    local urlMap = {
-        ["lighting.lua"] = "https://raw.githubusercontent.com/empfi/BABF-Script/main/lighting.lua",
-        ["config.lua"]   = "https://raw.githubusercontent.com/empfi/BABF-Script/main/config.lua",
-    }
-    local url = urlMap[path]
-    if url then
-        local okHttp, body = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if okHttp and type(body) == "string" and #body > 0 then
-            local fn = loadstring(body)
-            if fn then
-                local success, mod = pcall(fn)
-                if success then return mod end
-            end
-        end
-    end
     return nil
 end
 
@@ -42,6 +24,7 @@ local cfg = Config and Config.load() or {
     autoCollect = false,
     antiLagEnabled = false,
     autoBuyEnabled = false,
+    antiAfkEnabled = false,
     selectedItems = {"Basic Conveyor"},
     lighting = { preset = "none", shadowsDisabled = false },
 }
@@ -193,16 +176,12 @@ local updateButton = devTab:CreateButton({
     end,
 })
 
--- just found ts anti-afk ion if it works.
-getgenv().afk_toggle = true
+-- Anti-AFK initialization
+if getgenv().afk_toggle == nil then
+    getgenv().afk_toggle = (cfg.antiAfkEnabled == true)
+end
 local VirtualUser = game:GetService("VirtualUser")
 local status = getgenv().afk_toggle
-if status == nil then
-    getgenv().afk_toggle = false
-end
-if not p then
-    error("Failed to get LocalPlayer reference")
-end
 p.Idled:Connect(function()
     if not getgenv().afk_toggle then return end
     pcall(function()
@@ -242,8 +221,22 @@ local shopItems = {
 -- Global Variables
 getgenv().autoBuyEnabled, getgenv().autoCollect = cfg.autoBuyEnabled, cfg.autoCollect
 getgenv().selectedItems = cfg.selectedItems or { "Basic Conveyor" }
+getgenv().afk_toggle = cfg.antiAfkEnabled == true
 
 -- Auto Buy
+local function findAssetByName(name)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local assets = ReplicatedStorage:FindFirstChild("Assets") or ReplicatedStorage:WaitForChild("Assets", 2)
+    if not assets then return nil end
+    local lower = string.lower(name)
+    for _, d in ipairs(assets:GetDescendants()) do
+        if d.Name and string.lower(d.Name) == lower then
+            return d
+        end
+    end
+    return nil
+end
+
 local function tryPurchaseViaRemote(item)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local ok = pcall(function()
@@ -253,7 +246,12 @@ local function tryPurchaseViaRemote(item)
         if not gameFolder then return end
         local purchase = gameFolder:FindFirstChild("PurchaseItem") or gameFolder:WaitForChild("PurchaseItem", 2)
         if not purchase then return end
-        purchase:FireServer(item)
+        local asset = findAssetByName(item)
+        if asset then
+            -- Try instance-based first, then name as fallback
+            pcall(function() purchase:FireServer(asset) end)
+        end
+        pcall(function() purchase:FireServer(item) end)
     end)
     return ok
 end
@@ -300,6 +298,7 @@ function autoBuy()
 end
 
 local collectLabel = MainTab:CreateLabel("Stand on the middle of collectors", "info")
+local __collectConn
 local Toggle = MainTab:CreateToggle({
     Name = "Auto Collect Nearby Collectors",
     CurrentValue = cfg.autoCollect,
@@ -308,14 +307,11 @@ local Toggle = MainTab:CreateToggle({
         getgenv().autoCollect = state
         cfg.autoCollect = state
         if Config then Config.save(cfg) end
+        if __collectConn then __collectConn:Disconnect(); __collectConn = nil end
         if state then
             print("Auto Collect: ON")
-            task.spawn(function()
-                while getgenv().autoCollect do
-                    nearbyCollect()
-
-                    task.wait(0.02)
-                end
+            __collectConn = RunService.Heartbeat:Connect(function()
+                nearbyCollect()
             end)
         else
             print("Auto Collect: OFF")
@@ -393,33 +389,44 @@ local buyToggle = MainTab:CreateToggle({
 })
 
 -- Sound Control Toggle
--- Robust sound mute that persists and handles new sounds
+-- Robust sound mute that persists and handles new sounds without touching SoundService.Volume
 local __empfi_sound_conns = {}
+local function muteSoundInstance(snd)
+    if not snd or not snd:IsA("Sound") then return end
+    if snd:GetAttribute("empfi_prevVol") == nil then
+        snd:SetAttribute("empfi_prevVol", snd.Volume)
+    end
+    snd.Volume = 0
+end
+local function unmuteSoundInstance(snd)
+    if not snd or not snd:IsA("Sound") then return end
+    local prev = snd:GetAttribute("empfi_prevVol")
+    if typeof(prev) == "number" then snd.Volume = prev end
+end
 local function setGlobalMute(state)
-    local SoundService = game:GetService("SoundService")
     if state then
-        SoundService.Volume = 0
-        -- Mute all existing sounds
         for _, s in ipairs(game:GetDescendants()) do
             if s:IsA("Sound") then
-                pcall(function() s.Volume = 0 end)
+                pcall(muteSoundInstance, s)
             end
         end
-        -- Track new sounds and mute them
         if not __empfi_sound_conns.desc then
             __empfi_sound_conns.desc = game.DescendantAdded:Connect(function(obj)
                 if obj:IsA("Sound") then
-                    pcall(function() obj.Volume = 0 end)
+                    pcall(muteSoundInstance, obj)
                 end
             end)
         end
     else
-        SoundService.Volume = 1
         if __empfi_sound_conns.desc then
             __empfi_sound_conns.desc:Disconnect()
             __empfi_sound_conns.desc = nil
         end
-        -- Do not attempt to restore per-sound original volume values; rely on global volume
+        for _, s in ipairs(game:GetDescendants()) do
+            if s:IsA("Sound") then
+                pcall(unmuteSoundInstance, s)
+            end
+        end
     end
 end
 
@@ -497,12 +504,10 @@ rtxToggleUI = lightingTab:CreateToggle({
                 __suppressLightingToggle = false
             end
         else
-            -- Only reset to default if both toggles are off
+            -- On disable, always reset to default graphics
             if cfg.lighting.preset == "rtx" then
                 cfg.lighting.preset = "none"
-                if (not advToggleUI or (advToggleUI.Get and advToggleUI:Get() == false)) then
-                    applyLighting("none")
-                end
+                applyLighting("none")
             end
         end
         if Config then Config.save(cfg) end
@@ -524,12 +529,10 @@ advToggleUI = lightingTab:CreateToggle({
                 __suppressLightingToggle = false
             end
         else
-            -- Only reset to default if both toggles are off
+            -- On disable, always reset to default graphics
             if cfg.lighting.preset == "advanced" then
                 cfg.lighting.preset = "none"
-                if (not rtxToggleUI or (rtxToggleUI.Get and rtxToggleUI:Get() == false)) then
-                    applyLighting("none")
-                end
+                applyLighting("none")
             end
         end
         if Config then Config.save(cfg) end
@@ -574,158 +577,29 @@ local disableShadowsToggle = lightingTab:CreateToggle({
     end,
 })
 
--- Apply saved lighting preset on load
+-- Farm tab
+local farmTab = Window:CreateTab("Farm")
+local antiAfkToggle = farmTab:CreateToggle({
+    Name = "Anti-AFK",
+    CurrentValue = cfg.antiAfkEnabled == true,
+    Flag = "AntiAfkToggle",
+    Callback = function(state)
+        cfg.antiAfkEnabled = state
+        getgenv().afk_toggle = state
+        if Config then Config.save(cfg) end
+        Rayfield:Notify({
+            Title = "Farm",
+            Content = state and "Anti-AFK enabled" or "Anti-AFK disabled",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Apply saved lighting preset on load (requires lighting.lua present)
 task.spawn(function()
-    if LightingMod then
-        if cfg.lighting then
-            applyLighting(cfg.lighting.preset or "none")
-        end
+    if LightingMod and cfg.lighting then
+        applyLighting(cfg.lighting.preset or "none")
     end
 end)
 
--- Fallback inline lighting implementation if module not available
-if not LightingMod then
-    local Lighting = game:GetService("Lighting")
-    local function clearEffects()
-        for _, v in ipairs(Lighting:GetChildren()) do
-            if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
-                or v:IsA("SunRaysEffect") or v:IsA("Sky") or v:IsA("Atmosphere")
-                or v:IsA("DepthOfFieldEffect") then
-                v:Destroy()
-            end
-        end
-    end
-    LightingMod = {
-        applyDefault = function()
-            clearEffects()
-            Lighting.Ambient = Color3.fromRGB(127, 127, 127)
-            Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
-            Lighting.Brightness = 2
-            Lighting.GlobalShadows = true
-            Lighting.ShadowSoftness = 0.5
-            Lighting.EnvironmentDiffuseScale = 1
-            Lighting.EnvironmentSpecularScale = 1
-            Lighting.ColorShift_Bottom = Color3.new(0,0,0)
-            Lighting.ColorShift_Top = Color3.new(0,0,0)
-            Lighting.ClockTime = 14
-            Lighting.ExposureCompensation = 0
-        end,
-        disableShadows = function(disabled)
-            Lighting.GlobalShadows = not disabled
-            Lighting.ShadowSoftness = disabled and 0 or 0.4
-        end,
-        applyRTX = function()
-            clearEffects()
-            local Bloom = Instance.new("BloomEffect")
-            local Blur = Instance.new("BlurEffect")
-            local ColorCor = Instance.new("ColorCorrectionEffect")
-            local SunRays = Instance.new("SunRaysEffect")
-            local Sky = Instance.new("Sky")
-            local Atm = Instance.new("Atmosphere")
-            local DoF = Instance.new("DepthOfFieldEffect")
-
-            Bloom.Intensity = 0.4
-            Bloom.Size = 12
-            Bloom.Threshold = 0.85
-            Blur.Size = 2
-            ColorCor.Brightness = 0.15
-            ColorCor.Contrast = 0.5
-            ColorCor.Saturation = -0.05
-            ColorCor.TintColor = Color3.fromRGB(255, 245, 235)
-            SunRays.Intensity = 0.15
-            SunRays.Spread = 0.8
-            DoF.FarIntensity = 0.2
-            DoF.FocusDistance = 35
-            DoF.InFocusRadius = 25
-            DoF.NearIntensity = 0.15
-            Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"
-            Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
-            Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"
-            Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
-            Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"
-            Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
-            Sky.SunAngularSize = 12
-
-            Bloom.Parent = Lighting
-            Blur.Parent = Lighting
-            ColorCor.Parent = Lighting
-            SunRays.Parent = Lighting
-            Sky.Parent = Lighting
-            Atm.Parent = Lighting
-            DoF.Parent = Lighting
-
-            Lighting.Ambient = Color3.fromRGB(20, 20, 25)
-            Lighting.Brightness = 3
-            Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
-            Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
-            Lighting.EnvironmentDiffuseScale = 0.25
-            Lighting.EnvironmentSpecularScale = 0.3
-            Lighting.GlobalShadows = true
-            Lighting.OutdoorAmbient = Color3.fromRGB(20, 20, 25)
-            Lighting.ShadowSoftness = 0.25
-            Lighting.ClockTime = 7.25
-            Lighting.GeographicLatitude = 25
-            Lighting.ExposureCompensation = 0.35
-
-            Atm.Density = 0.05
-            Atm.Offset = 0.5
-            Atm.Color = Color3.fromRGB(200, 210, 235)
-            Atm.Decay = Color3.fromRGB(120, 140, 160)
-            Atm.Glare = 0
-            Atm.Haze = 2
-        end,
-        applyAdvanced = function()
-            clearEffects()
-            local Sky = Instance.new("Sky")
-            local Bloom = Instance.new("BloomEffect")
-            local ColorC = Instance.new("ColorCorrectionEffect")
-            local SunRays = Instance.new("SunRaysEffect")
-            Sky.MoonAngularSize = 11
-            Sky.MoonTextureId = "rbxasset://sky/moon.jpg"
-            Sky.SkyboxBk = "rbxassetid://17843929750"
-            Sky.SkyboxDn = "rbxassetid://17843931996"
-            Sky.SkyboxFt = "rbxassetid://17843931265"
-            Sky.SkyboxLf = "rbxassetid://17843929139"
-            Sky.SkyboxRt = "rbxassetid://17843930617"
-            Sky.SkyboxUp = "rbxassetid://17843932671"
-            Sky.StarCount = 3000
-            Sky.SunAngularSize = 21
-            Sky.SunTextureId = "rbxasset://sky/sun.jpg"
-            Bloom.Enabled = true
-            Bloom.Intensity = 0.65
-            Bloom.Size = 8
-            Bloom.Threshold = 0.9
-            ColorC.Brightness = 0
-            ColorC.Contrast = 0.08
-            ColorC.Enabled = true
-            ColorC.Saturation = 0.2
-            ColorC.TintColor = Color3.new(1, 1, 1)
-            SunRays.Intensity = 0.25
-            SunRays.Spread = 1
-            SunRays.Enabled = true
-            Sky.Parent = Lighting
-            Bloom.Parent = Lighting
-            ColorC.Parent = Lighting
-            SunRays.Parent = Lighting
-            Lighting.Brightness = 1.6
-            Lighting.Ambient = Color3.new(0.25, 0.25, 0.25)
-            Lighting.ShadowSoftness = 0.4
-            Lighting.ClockTime = 13.4
-            Lighting.OutdoorAmbient = Color3.new(0.25, 0.25, 0.25)
-            Lighting.GlobalShadows = true
-        end
-    }
-    -- Apply config using fallback LightingMod
-    if cfg and cfg.lighting then
-        if cfg.lighting.preset == "rtx" and LightingMod.applyRTX then
-            LightingMod.applyRTX()
-        elseif cfg.lighting.preset == "advanced" and LightingMod.applyAdvanced then
-            LightingMod.applyAdvanced()
-        elseif cfg.lighting.preset == "none" and LightingMod.applyDefault then
-            LightingMod.applyDefault()
-        end
-        if cfg.lighting.shadowsDisabled and LightingMod.disableShadows then
-            LightingMod.disableShadows(true)
-        end
-    end
-end
+-- (removed stray connections)

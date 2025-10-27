@@ -7,6 +7,7 @@ local DEFAULTS = {
     autoCollect = false,
     antiLagEnabled = false,
     autoBuyEnabled = false,
+    antiAfkEnabled = false,
     selectedItems = {"Basic Conveyor"},
     lighting = {
         preset = "none", -- none | rtx | advanced
@@ -34,7 +35,11 @@ local function merge(dst, src)
 end
 
 local function canFS()
-    return typeof(writefile) == "function" and typeof(readfile) == "function" and typeof(isfolder) == "function" and typeof(makefolder) == "function"
+    return typeof(writefile) == "function"
+        and typeof(readfile) == "function"
+        and typeof(isfolder) == "function"
+        and typeof(makefolder) == "function"
+        and typeof(isfile) == "function"
 end
 
 local function getPath()
